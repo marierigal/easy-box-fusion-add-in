@@ -1,0 +1,13 @@
+{
+	"autodeskProduct":	"Fusion",
+	"type":	"addin",
+	"id":	"068ca801-04c5-4365-a9e9-c27685378272",
+	"author":	"Marie Rigal",
+	"description":	{
+		"":	"An add-in that helps with creating boxes or other panel based projects."
+	},
+	"version":	"0.1.0",
+	"runOnStartup":	false,
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
