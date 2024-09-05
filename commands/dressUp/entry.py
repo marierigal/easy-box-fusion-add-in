@@ -261,6 +261,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
 
+    # Get the timeline marker position
+    timeline = design.timeline
+    start_index = timeline.markerPosition
+
     select_input: adsk.core.SelectionCommandInput = inputs.itemById(SELECT_INPUT_ID)
     table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
 
@@ -287,16 +291,21 @@ def command_execute(args: adsk.core.CommandEventArgs):
         thickness_input: adsk.core.ValueCommandInput = inputs.itemById(
             THICKNESS_INPUT_ID
         )
-        panel_component.features.extrudeFeatures.addSimple(
+        extrude = panel_component.features.extrudeFeatures.addSimple(
             face,
             adsk.core.ValueInput.createByString(
                 "{} * -1".format(thickness_input.expression)
             ),
             adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
         )
+        extrude.name = "Extrude {}".format(panel_name)
 
     # Remove the original body
     parent_component.features.removeFeatures.add(original_body)
+
+    # Create a new timeline group
+    group = timeline.timelineGroups.add(start_index, timeline.markerPosition - 1)
+    group.name = "Dress Up {}".format(original_body.name)
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
