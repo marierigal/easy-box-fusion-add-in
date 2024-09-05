@@ -67,3 +67,21 @@ def handle_error(name: str, show_message_box: bool = False):
     # If desired you could show an error as a message box.
     if show_message_box:
         ui.messageBox(f"{name}\n{traceback.format_exc()}")
+
+
+def msg_box(
+    message: str,
+    title: str = "",
+    buttons: adsk.core.MessageBoxButtonTypes = adsk.core.MessageBoxButtonTypes.OKButtonType,
+    icon: adsk.core.MessageBoxIconTypes = adsk.core.MessageBoxIconTypes.NoIconIconType,
+) -> adsk.core.DialogResults:
+    """Utility function to display a message box.
+
+    Arguments:
+    title -- The title of the message box.
+    message -- The message to display.
+    buttons -- The buttons to display. Default to OK.
+    icon -- The icon to display. Default to none.
+    """
+    log(f"{title} {message}", adsk.core.LogLevels.InfoLogLevel, True)
+    return ui.messageBox(message, title, buttons, icon)
