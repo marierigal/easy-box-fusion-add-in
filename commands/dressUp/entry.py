@@ -107,7 +107,7 @@ def on_body_selection(select_input: adsk.core.SelectionCommandInput):
     )
 
     # Add all faces of the selected body to the faces input
-    original_body = select_input.selection(0).entity
+    body = select_input.selection(0).entity
 
     # Update input to select faces
     select_input.clearSelection()
@@ -116,7 +116,7 @@ def on_body_selection(select_input: adsk.core.SelectionCommandInput):
     select_input.addSelectionFilter("SolidFaces")
     select_input.setSelectionLimits(1, 0)
 
-    for face in original_body.faces:
+    for face in body.faces:
         select_input.addSelection(face)
         add_face_to_table(table_input, face.tempId)
 
@@ -125,6 +125,8 @@ def on_body_selection(select_input: adsk.core.SelectionCommandInput):
 
     # Set the focus on the select input
     select_input.hasFocus = True
+
+    original_body = body
 
 
 def on_faces_selection(select_input: adsk.core.SelectionCommandInput):
@@ -137,6 +139,16 @@ def on_faces_selection(select_input: adsk.core.SelectionCommandInput):
     count = table_input.rowCount
     for _ in range(1, count):
         table_input.deleteRow(table_input.rowCount - 1)
+
+    if (
+        select_input.selectionCount == 0
+        or select_input.selection(0).entity.objectType
+        != adsk.fusion.BRepFace.classType()
+    ):
+        select_input.clearSelection()
+        global original_body
+        original_body = None
+        return
 
     # Add all selected faces to the table
     for i in range(select_input.selectionCount):
@@ -356,6 +368,6 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Destroy Event")
 
-    global local_handlers, body_selected
+    global local_handlers, original_body
     local_handlers = []
-    body_selected = False
+    original_body = None
