@@ -471,6 +471,10 @@ def create_mortises_and_tenons(
     tenon_width_expression: str = None,
     add_as_built_joint: bool = False,
 ) -> bool:
+    # Get timeline current marker position
+    timeline = design.timeline
+    timeline_start_index = timeline.markerPosition
+
     ######################################
     # Create the sketch
     ######################################
@@ -639,6 +643,15 @@ def create_mortises_and_tenons(
         if not joint:
             update_status_message("Joint creation failed", StatusLevel.Error)
             return False
+
+    ######################################
+    # Group the features on the timeline
+    ######################################
+
+    timeline_group = timeline.timelineGroups.add(
+        timeline_start_index, timeline.markerPosition - 1
+    )
+    timeline_group.name = f"Box Joint ({body.parentComponent.name}::{body.name})"
 
     update_status_message("Preview available", StatusLevel.Success)
     return True
