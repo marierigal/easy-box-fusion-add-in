@@ -75,8 +75,11 @@ class StatusLevel:
     Error = 2
 
 
-# Executed when add-in is run.
 def start():
+    """
+    Executed when the add-in is run.
+    """
+
     # Create a command Definition.
     cmd_def = ui.commandDefinitions.addButtonDefinition(
         CMD_ID, CMD_NAME, CMD_Description, ICON_FOLDER
@@ -100,8 +103,11 @@ def start():
     control.isPromoted = IS_PROMOTED
 
 
-# Executed when add-in is stopped.
 def stop():
+    """
+    Executed when add-in is stopped.
+    """
+
     # Get the various UI elements for this command
     workspace = ui.workspaces.itemById(WORKSPACE_ID)
     panel = workspace.toolbarPanels.itemById(PANEL_ID)
@@ -117,9 +123,14 @@ def stop():
         command_definition.deleteMe()
 
 
-# Function that is called when a user clicks the corresponding button in the UI.
-# This defines the contents of the command dialog and connects to the command related events.
 def command_created(args: adsk.core.CommandCreatedEventArgs):
+    """
+    Function that is called when a user clicks
+    the corresponding button in the UI.
+    This defines the contents of the command dialog
+    and connects to the command related events.
+    """
+
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Created Event")
 
@@ -130,9 +141,13 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     connect_to_events(args.command)
 
 
-# This event handler is called when the user clicks the OK button in the command dialog or
-# is immediately called after the created event not command inputs were created for the dialog.
 def command_execute(args: adsk.core.CommandEventArgs):
+    """
+    This event handler is called when the user clicks
+    the OK button in the command dialog or is immediately called
+    after the created event not command inputs were created for the dialog.
+    """
+
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Execute Event")
     inputs = args.command.commandInputs
@@ -166,8 +181,12 @@ def command_execute(args: adsk.core.CommandEventArgs):
         )
 
 
-# This event handler is called when the command needs to compute a new preview in the graphics window.
 def command_preview(args: adsk.core.CommandEventArgs):
+    """
+    This event handler is called when the command
+    needs to compute a new preview in the graphics window.
+    """
+
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Preview Event")
     inputs = args.command.commandInputs
@@ -207,9 +226,13 @@ def command_preview(args: adsk.core.CommandEventArgs):
     args.isValidResult = min(results.values())
 
 
-# This event handler is called when the user changes anything in the command dialog
-# allowing you to modify values of other inputs based on that change.
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
+    """
+    This event handler is called when the user changes
+    anything in the command dialog allowing you to modify
+    values of other inputs based on that change.
+    """
+
     changed_input = args.input
     inputs = args.inputs
 
@@ -251,9 +274,14 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
         last_add_joint = changed_input.value
 
 
-# This event handler is called when the user interacts with any of the inputs in the dialog
-# which allows you to verify that all of the inputs are valid and enables the OK button.
 def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
+    """
+    This event handler is called when the user interacts
+    with any of the inputs in the dialog which allows you
+    to verify that all of the inputs are valid and enables
+    the OK button.
+    """
+
     # General logging for debug.
     futil.log(f"{CMD_NAME} Validate Input Event")
 
@@ -283,8 +311,11 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
         return
 
 
-# This event handler is called when the command terminates.
 def command_destroy(args: adsk.core.CommandEventArgs):
+    """
+    This event handler is called when the command terminates.
+    """
+
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Destroy Event")
 
@@ -301,6 +332,11 @@ def command_destroy(args: adsk.core.CommandEventArgs):
 
 
 def command_pre_select(args: adsk.core.SelectionEventArgs):
+    """
+    This event handler is called when the user
+    hover over an object in the graphics window.
+    """
+
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Pre-Select Event")
 
@@ -331,6 +367,10 @@ def command_pre_select(args: adsk.core.SelectionEventArgs):
 
 
 def create_inputs(inputs: adsk.core.CommandInputs):
+    """
+    Create the inputs for the command dialog.
+    """
+
     # Get the default length units
     default_units = design.unitsManager.defaultLengthUnits
 
@@ -406,6 +446,10 @@ def create_inputs(inputs: adsk.core.CommandInputs):
 
 
 def connect_to_events(command: adsk.core.Command):
+    """
+    Connect to the events of the command.
+    """
+
     futil.add_handler(command.execute, command_execute, local_handlers=local_handlers)
     futil.add_handler(
         command.inputChanged, command_input_changed, local_handlers=local_handlers
@@ -423,12 +467,20 @@ def connect_to_events(command: adsk.core.Command):
 
 
 def get_plane_from_face(face: adsk.fusion.BRepFace) -> adsk.core.Plane:
+    """
+    Get a plane from a face.
+    """
+
     point = face.pointOnFace
     _, normal = face.evaluator.getNormalAtPoint(point)
     return adsk.core.Plane.create(point, normal)
 
 
 def are_faces_coplanar(faces: list[adsk.fusion.BRepFace]) -> bool:
+    """
+    Check if a list of faces are coplanar.
+    """
+
     plane = get_plane_from_face(faces[0])
     for face in faces[1:]:
         if not plane.isCoPlanarTo(get_plane_from_face(face)):
@@ -440,6 +492,10 @@ def update_status_message(
     message: str = STATUS_HTML_DEFAULT_MESSAGE,
     info_level: StatusLevel = StatusLevel.Info,
 ):
+    """
+    Update the message in status textbox.
+    """
+
     global status_input
 
     prefix = STATUS_HTML_PREFIX
@@ -464,6 +520,10 @@ def create_mortises_and_tenons(
     tenon_width_expression: str = None,
     add_as_built_joint: bool = False,
 ) -> bool:
+    """
+    Create mortises and tenons between a body and a face.
+    """
+
     # Get timeline current marker position
     timeline = design.timeline
     timeline_start_index = timeline.markerPosition
