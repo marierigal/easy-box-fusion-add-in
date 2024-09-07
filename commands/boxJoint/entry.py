@@ -56,6 +56,11 @@ status_input: adsk.core.TextBoxCommandInput = None
 # they are not released and garbage collected.
 local_handlers = []
 
+last_tenon_count = DEFAULT_TENON_COUNT
+last_auto_width = DEFAULT_AUTO_WIDTH
+last_tenon_width = DEFAULT_TENON_WIDTH
+last_add_joint = DEFAULT_ADD_JOINT
+
 
 class StatusLevel:
     """
@@ -208,6 +213,8 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
         f"{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}"
     )
 
+    global last_tenon_count, last_tenon_width, last_auto_width, last_add_joint
+
     # Reset the status message
     update_status_message()
 
@@ -216,11 +223,27 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
         tenon_width_input = inputs.itemById(TENON_WIDTH_INPUT_ID)
         tenon_width_input.isVisible = not changed_input.value
         # Reset to default value to prevent inputs from being invalid
-        tenon_width_input.value = DEFAULT_TENON_WIDTH
+        tenon_width_input.value = last_tenon_width
 
     # On select body change, focus on select face input
     elif changed_input.id == SELECT_BODY_INPUT_ID:
         inputs.itemById(SELECT_FACE_INPUT_ID).hasFocus = True
+
+    # Keep last tenon_count value for next time
+    elif changed_input.id == TENON_COUNT_INPUT_ID:
+        last_tenon_count = changed_input.value
+
+    # Keep last tenon_width value for next time
+    elif changed_input.id == TENON_WIDTH_INPUT_ID:
+        last_tenon_width = changed_input.value
+
+    # Keep last auto_width value for next time
+    elif changed_input.id == AUTO_WIDTH_INPUT_ID:
+        last_auto_width = changed_input.value
+
+    # Keep last add_joint value for next time
+    elif changed_input.id == ADD_JOINT_INPUT_ID:
+        last_add_joint = changed_input.value
 
 
 # This event handler is called when the user interacts with any of the inputs in the dialog
@@ -368,7 +391,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         1,
         99,
         2,
-        DEFAULT_TENON_COUNT,
+        last_tenon_count,
     )
 
     # Create a bool to set if the tenon width should be calculated or user defined
@@ -377,7 +400,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         "Auto Width",
         True,
         "",
-        DEFAULT_AUTO_WIDTH,
+        last_auto_width,
     )
     auto_width_input.tooltip = "Tenons and mortises will have the same width"
 
@@ -386,7 +409,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         TENON_WIDTH_INPUT_ID,
         "Tenons Width",
         default_units,
-        adsk.core.ValueInput.createByReal(DEFAULT_TENON_WIDTH),
+        adsk.core.ValueInput.createByReal(last_tenon_width),
     )
     tenon_width_input.tooltip = "Set the width of the tenons"
     tenon_width_input.minimumValue = 0.1
@@ -398,7 +421,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         "Add Joint",
         True,
         "",
-        DEFAULT_ADD_JOINT,
+        last_add_joint,
     )
     add_joint_input.tooltip = "Add an as built joint between the bodies"
     add_joint_input.tooltipDescription = (
