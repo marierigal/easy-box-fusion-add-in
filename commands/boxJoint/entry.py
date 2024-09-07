@@ -533,7 +533,7 @@ def create_mortises_and_tenons(
     ######################################
 
     # Create a sketch on the selected face
-    sketch = design.activeComponent.sketches.add(face)
+    sketch = design.rootComponent.sketches.add(face)
 
     # Project the edges of the face onto the sketch
     face_lines: list[adsk.fusion.SketchLine] = []
@@ -612,7 +612,7 @@ def create_mortises_and_tenons(
     ######################################
 
     # Create the extrude feature
-    extrude_features = design.activeComponent.features.extrudeFeatures
+    extrude_features = design.rootComponent.features.extrudeFeatures
     extrude_input = extrude_features.createInput(
         sketch.profiles.item(1),
         adsk.fusion.FeatureOperations.CutFeatureOperation,
@@ -643,7 +643,7 @@ def create_mortises_and_tenons(
             f"+ {tenon_width_expression}"
         )
 
-        pattern_features = design.activeComponent.features.rectangularPatternFeatures
+        pattern_features = design.rootComponent.features.rectangularPatternFeatures
         pattern_input = pattern_features.createInput(
             pattern_input_entities,
             rectangle.item(0),
@@ -667,7 +667,7 @@ def create_mortises_and_tenons(
     tools = adsk.core.ObjectCollection.create()
     tools.add(body)
 
-    combine_features = design.activeComponent.features.combineFeatures
+    combine_features = design.rootComponent.features.combineFeatures
     combine_input = combine_features.createInput(target_body, tools)
     combine_input.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
     combine_input.isKeepToolBodies = True
@@ -688,7 +688,7 @@ def create_mortises_and_tenons(
         body_occurrence = body_component.allOccurrences.itemByName(body.name)
         face_occurrence = face_component.allOccurrences.itemByName(face.body.name)
 
-        joints = design.activeComponent.asBuiltJoints
+        joints = design.rootComponent.asBuiltJoints
         joint_input = joints.createInput(body_occurrence, face_occurrence, None)
         joint_input.setAsRigidJointMotion()
         joint = joints.add(joint_input)
