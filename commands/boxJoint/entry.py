@@ -156,13 +156,14 @@ def command_execute(args: adsk.core.CommandEventArgs):
         ADD_JOINT_INPUT_ID
     )
 
-    create_mortises_and_tenons(
-        select_body_input.selection(0).entity,
-        select_face_input.selection(0).entity,
-        tenon_count_input.value,
-        tenon_width_input.expression if not auto_width_input.value else None,
-        add_joint_input.value,
-    )
+    for face_index in range(select_face_input.selectionCount):
+        create_mortises_and_tenons(
+            select_body_input.selection(0).entity,
+            select_face_input.selection(face_index).entity,
+            tenon_count_input.value,
+            tenon_width_input.expression if not auto_width_input.value else None,
+            add_joint_input.value,
+        )
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
@@ -193,13 +194,17 @@ def command_preview(args: adsk.core.CommandEventArgs):
     # Reduce the body opacity to help visualize the joint
     select_body_input.selection(0).entity.opacity = 0.4
 
-    create_mortises_and_tenons(
-        select_body_input.selection(0).entity,
-        select_face_input.selection(0).entity,
-        tenon_count_input.value,
-        tenon_width_input.expression if not auto_width_input.value else None,
-        add_joint_input,
-    )
+    results = {}
+    for face_index in range(select_face_input.selectionCount):
+        results[face_index] = create_mortises_and_tenons(
+            select_body_input.selection(0).entity,
+            select_face_input.selection(face_index).entity,
+            tenon_count_input.value,
+            tenon_width_input.expression if not auto_width_input.value else None,
+            add_joint_input,
+        )
+
+    args.isValidResult = min(results.values())
 
 
 # This event handler is called when the user changes anything in the command dialog
@@ -277,38 +282,6 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
         args.areInputsValid = False
         return
 
-    body = select_body_input.selection(0).entity
-    face = select_face_input.selection(0).entity
-
-    if not isinstance(body, adsk.fusion.BRepBody) or not isinstance(
-        face, adsk.fusion.BRepFace
-    ):
-        return
-
-    # The body of the selected face should not be the selected body
-    if face.body == body:
-        update_status_message(
-            "The face should not be attached to the body", StatusLevel.Error
-        )
-        select_face_input.clearSelection()
-        args.areInputsValid = False
-        return
-
-    # The selected face should "touch" one face of the selected body
-    coplanar = False
-    for body_face in body.faces:
-        if are_faces_coplanar([face, body_face]):
-            coplanar = True
-            break
-
-    if not coplanar:
-        update_status_message(
-            "The face should be coplanar with the body", StatusLevel.Error
-        )
-        select_face_input.clearSelection()
-        args.areInputsValid = False
-        return
-
 
 # This event handler is called when the command terminates.
 def command_destroy(args: adsk.core.CommandEventArgs):
@@ -318,7 +291,13 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     global local_handlers, status_input
     local_handlers = []
 
+    # Reset the status message input
     status_input = None
+
+    # Reset the selected body opacity
+    select_body_input = args.command.commandInputs.itemById(SELECT_BODY_INPUT_ID)
+    if select_body_input.selectionCount > 0:
+        select_body_input.selection(0).entity.opacity = 1
 
 
 def command_pre_select(args: adsk.core.SelectionEventArgs):
@@ -331,33 +310,24 @@ def command_pre_select(args: adsk.core.SelectionEventArgs):
 
     if args.activeInput.id == SELECT_FACE_INPUT_ID:
         select_body_input = inputs.itemById(SELECT_BODY_INPUT_ID)
+
         if select_body_input.selectionCount == 0:
             return
 
         selected_body: adsk.fusion.BRepBody = select_body_input.selection(0).entity
 
         # Prevent selecting a face from the selected body
-        if (
-            isinstance(selected_entity, adsk.fusion.BRepFace)
-            and selected_entity.body == selected_body
-        ):
+        if selected_entity.body == selected_body:
             args.isSelectable = False
             return
 
-    elif args.activeInput.id == SELECT_BODY_INPUT_ID:
-        select_face_input = inputs.itemById(SELECT_FACE_INPUT_ID)
-        if select_face_input.selectionCount == 0:
-            return
-
-        selected_face: adsk.fusion.BRepFace = select_face_input.selection(0).entity
-
-        # Prevent selecting a body that has the selected face attached to it
-        if (
-            isinstance(selected_entity, adsk.fusion.BRepBody)
-            and selected_entity == selected_face.body
-        ):
-            args.isSelectable = False
-            return
+        # Prevent selecting a face that is not coplanar with the selected body faces
+        selectable = False
+        for body_face in selected_body.faces:
+            if are_faces_coplanar([selected_entity, body_face]):
+                selectable = True
+                break
+        args.isSelectable = selectable
 
 
 def create_inputs(inputs: adsk.core.CommandInputs):
@@ -380,7 +350,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         SELECT_FACE_INPUT_ID, "Face", select_body_input_tooltip
     )
     select_face_input.addSelectionFilter("SolidFaces")
-    select_face_input.setSelectionLimits(1, 1)
+    select_face_input.setSelectionLimits(1, 0)
     select_face_input.tooltip = select_body_input_tooltip
     select_face_input.toolClipFilename = ICON_FOLDER + "Face.png"
 
