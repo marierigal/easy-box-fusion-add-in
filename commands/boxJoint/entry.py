@@ -219,7 +219,7 @@ def command_preview(args: adsk.core.CommandEventArgs):
             select_face_input.selection(face_index).entity,
             tenon_count_input.value,
             tenon_width_input.expression if not auto_width_input.value else None,
-            add_joint_input,
+            add_joint_input.value,
         )
 
     args.isValidResult = min(results.values())
@@ -728,8 +728,12 @@ def create_mortises_and_tenons(
     face_component = face.body.parentComponent
 
     if add_as_built_joint and not body_component == face_component:
-        body_occurrence = body_component.allOccurrences.itemByName(body.name)
-        face_occurrence = face_component.allOccurrences.itemByName(face.body.name)
+        body_occurrence = root_component.allOccurrencesByComponent(body_component).item(
+            0
+        )
+        face_occurrence = root_component.allOccurrencesByComponent(face_component).item(
+            0
+        )
 
         joints = root_component.asBuiltJoints
         joint_input = joints.createInput(body_occurrence, face_occurrence, None)
