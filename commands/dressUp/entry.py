@@ -33,6 +33,7 @@ DEFAULT_THICKNESS = 0.3
 SELECT_FACES_INPUT_ID = f"{CMD_ID}_select_faces_input"
 SELECT_ALL_FACES_INPUT_ID = f"{CMD_ID}_select_all_faces_input"
 THICKNESS_INPUT_ID = f"{CMD_ID}_thickness_input"
+APPLY_THICKNESS_BUTTON_ID = f"{CMD_ID}_apply_thickness_button"
 TABLE_INPUT_ID = f"{CMD_ID}_table_input"
 CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
 CREATE_COMPONENT_INPUT_ID = f"{CMD_ID}_create_component_input"
@@ -49,16 +50,16 @@ class PanelConfig:
 
     def __init__(
         self,
-        face_entity: adsk.fusion.BRepFace,
+        face_id: int,
         panel_name: str = "",
         thickness_expression: str = "",
     ):
-        self.face_entity = face_entity
+        self.face_id = face_id
         self.panel_name = panel_name
         self.thickness_expression = thickness_expression
 
     def __eq__(self, value: object) -> bool:
-        return isinstance(value, PanelConfig) and value.face_entity == self.face_entity
+        return isinstance(value, PanelConfig) and value.face_id == self.face_id
 
 
 def start():
@@ -138,10 +139,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
     futil.log(f"{CMD_NAME} Command Execute Event")
     inputs = args.command.commandInputs
 
-    # Get the thickness value
-    thickness_input: adsk.core.ValueCommandInput = inputs.itemById(THICKNESS_INPUT_ID)
-    thickness_expression = thickness_input.expression
-
     # Get the body from the first selected face
     select_faces_input: adsk.core.SelectionCommandInput = inputs.itemById(
         SELECT_FACES_INPUT_ID
@@ -149,9 +146,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     body: adsk.fusion.BRepBody = select_faces_input.selection(0).entity.body
 
     # Get the panel configurations
-    panel_configs = get_panel_configs(
-        body, thickness_expression, inputs.itemById(TABLE_INPUT_ID)
-    )
+    panel_configs = get_panel_configs_from_table(inputs.itemById(TABLE_INPUT_ID))
 
     # Get the create component value
     create_component_input: adsk.core.BoolValueCommandInput = inputs.itemById(
@@ -173,10 +168,6 @@ def command_preview(args: adsk.core.CommandEventArgs):
     futil.log(f"{CMD_NAME} Command Preview Event")
     inputs = args.command.commandInputs
 
-    # Get the thickness value
-    thickness_input: adsk.core.ValueCommandInput = inputs.itemById(THICKNESS_INPUT_ID)
-    thickness_expression = thickness_input.expression
-
     # Get the body from the first selected face
     select_faces_input: adsk.core.SelectionCommandInput = inputs.itemById(
         SELECT_FACES_INPUT_ID
@@ -184,9 +175,7 @@ def command_preview(args: adsk.core.CommandEventArgs):
     body: adsk.fusion.BRepBody = select_faces_input.selection(0).entity.body
 
     # Get the panel configurations
-    panel_configs = get_panel_configs(
-        body, thickness_expression, inputs.itemById(TABLE_INPUT_ID)
-    )
+    panel_configs = get_panel_configs_from_table(inputs.itemById(TABLE_INPUT_ID))
 
     # Get the create component value
     create_component_input: adsk.core.BoolValueCommandInput = inputs.itemById(
@@ -251,7 +240,7 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
         thickness_expression = thickness_input.expression
 
         # Get previous panel configurations
-        panel_configs = get_panel_configs(body, thickness_expression, table_input)
+        panel_configs = get_panel_configs_from_table(table_input)
 
         # Reset the table
         table_input.clear()
@@ -263,14 +252,39 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
             face_id = face.tempId
 
             panel_config = panel_configs.get(face_id)
-            add_face_to_table(
+            add_config_row_to_table(
                 table_input,
                 (
                     panel_config
                     if panel_config
-                    else PanelConfig(face, f"Panel {face_id}", thickness_expression)
+                    else PanelConfig(face_id, f"Panel {face_id}", thickness_expression)
                 ),
             )
+
+    elif changed_input.id == APPLY_THICKNESS_BUTTON_ID:
+        # Get the table input
+        table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
+
+        # Get the thickness value
+        thickness_input: adsk.core.ValueCommandInput = inputs.itemById(
+            THICKNESS_INPUT_ID
+        )
+        thickness_expression = thickness_input.expression
+
+        # Get the panel configurations
+        panel_configs = get_panel_configs_from_table(table_input)
+
+        # Update the thickness of all panels
+        for panel_config in panel_configs.values():
+            panel_config.thickness_expression = thickness_expression
+
+        # Reset the table
+        table_input.clear()
+        add_header_row_to_table(table_input)
+
+        # Add the face rows
+        for panel_config in panel_configs.values():
+            add_config_row_to_table(table_input, panel_config)
 
 
 def command_destroy(args: adsk.core.CommandEventArgs):
@@ -339,6 +353,13 @@ def create_inputs(inputs: adsk.core.CommandInputs):
     thickness_input.minimumValue = 0.01
     thickness_input.tooltipDescription = "The default thickness of the panels"
 
+    # Create a button to apply the thickness to all panels
+    apply_thickness_button = inputs.addBoolValueInput(
+        APPLY_THICKNESS_BUTTON_ID, "Apply Thickness", False
+    )
+    apply_thickness_button.isFullWidth = True
+    apply_thickness_button.tooltip = "Apply the thickness to all panels"
+
     # Create a bool input to allow component creation
     create_component_input = inputs.addBoolValueInput(
         CREATE_COMPONENT_INPUT_ID, "Create Component", True, "", True
@@ -358,7 +379,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
 
     # Create a table input to display per faces configuration
     table_input = config_group_children.addTableCommandInput(
-        TABLE_INPUT_ID, "Panels", 2, "1:3"
+        TABLE_INPUT_ID, "Panels", 2, "1:1"
     )
     table_input.maximumVisibleRows = 8
     add_header_row_to_table(table_input)
@@ -390,22 +411,22 @@ def add_header_row_to_table(table_input: adsk.core.TableCommandInput):
     table_inputs = table_input.commandInputs
     row_index = table_input.rowCount
 
-    # Face ID
-    face_id_header = table_inputs.addStringValueInput(
-        f"{CMD_ID}_face_id_header", "Face ID Header", "ID"
-    )
-    face_id_header.isReadOnly = True
-    table_input.addCommandInput(face_id_header, row_index, 0)
-
     # Panel name
     panel_name_header = table_inputs.addStringValueInput(
         f"{CMD_ID}_panel_name_header", "Panel Name Header", "Panel"
     )
     panel_name_header.isReadOnly = True
-    table_input.addCommandInput(panel_name_header, row_index, 1)
+    table_input.addCommandInput(panel_name_header, row_index, 0)
+
+    # Panel thickness
+    panel_thickness_header = table_inputs.addStringValueInput(
+        f"{CMD_ID}_panel_thickness_header", "Panel Thickness Header", "Thickness"
+    )
+    panel_thickness_header.isReadOnly = True
+    table_input.addCommandInput(panel_thickness_header, row_index, 1)
 
 
-def add_face_to_table(
+def add_config_row_to_table(
     table_input: adsk.core.TableCommandInput, panelConfig: PanelConfig
 ):
     """
@@ -414,29 +435,27 @@ def add_face_to_table(
 
     table_inputs = table_input.commandInputs
     row_index = table_input.rowCount
-    face_id = panelConfig.face_entity.tempId
+    face_id = panelConfig.face_id
 
-    # Add a string input for the face ID
-    face_id_input = table_inputs.addStringValueInput(
-        f"{CMD_ID}_face_{face_id}",
-        "Face ID",
-        f"{face_id}",
-    )
-    face_id_input.isReadOnly = True
-    table_input.addCommandInput(face_id_input, row_index, 0)
-
-    # Add a string input for the panel name
+    # Add a string input for the name of the panel
     panel_name_input = table_inputs.addStringValueInput(
         f"{CMD_ID}_panel_name_{face_id}",
         "Panel Name",
         panelConfig.panel_name,
     )
-    table_input.addCommandInput(panel_name_input, row_index, 1)
+    table_input.addCommandInput(panel_name_input, row_index, 0)
+
+    # Add a value input for the thickness of the panel
+    panel_thickness_input = table_inputs.addValueInput(
+        f"{CMD_ID}_panel_thickness_{face_id}",
+        "Thickness",
+        app.activeProduct.unitsManager.defaultLengthUnits,
+        adsk.core.ValueInput.createByString(panelConfig.thickness_expression),
+    )
+    table_input.addCommandInput(panel_thickness_input, row_index, 1)
 
 
-def get_panel_configs(
-    body: adsk.fusion.BRepBody,
-    default_thickness: str,
+def get_panel_configs_from_table(
     table_input: adsk.core.TableCommandInput,
 ) -> dict:
     """
@@ -445,10 +464,10 @@ def get_panel_configs(
 
     panel_configs = {}
     for i in range(1, table_input.rowCount):
-        face_id = int(table_input.getInputAtPosition(i, 0).value)
-        panel_name = table_input.getInputAtPosition(i, 1).value
-        face: adsk.fusion.BRepFace = body.findByTempId(face_id)[0]
-        panel_configs[face.tempId] = PanelConfig(face, panel_name, default_thickness)
+        face_id = int(table_input.getInputAtPosition(i, 0).id.split("_")[-1])
+        name = table_input.getInputAtPosition(i, 0).value
+        thickness = table_input.getInputAtPosition(i, 1).expression
+        panel_configs[face_id] = PanelConfig(face_id, name, thickness)
 
     return panel_configs
 
@@ -487,11 +506,12 @@ def dress_up(
             panel_component = parent_component
 
         # Create a new body for the panel
+        value_input = adsk.core.ValueInput.createByString(
+            f"{panel_config.thickness_expression} * -1"
+        )
         extrude_feature = panel_component.features.extrudeFeatures.addSimple(
-            panel_config.face_entity,
-            adsk.core.ValueInput.createByString(
-                f"{panel_config.thickness_expression} * -1"
-            ),
+            body.findByTempId(panel_config.face_id)[0],
+            value_input,
             adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
         )
 
