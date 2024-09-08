@@ -7,7 +7,6 @@ from ... import config
 
 app = adsk.core.Application.get()
 ui = app.userInterface
-design = adsk.fusion.Design.cast(app.activeProduct)
 
 CMD_ID = f"{config.COMPANY_NAME}_{config.ADDIN_NAME}_dressUp"
 CMD_NAME = "Dress Up"
@@ -233,7 +232,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
     """
 
     # Get the default length units
-    default_units = design.unitsManager.defaultLengthUnits
+    default_units = app.activeProduct.unitsManager.defaultLengthUnits
 
     # Create a selection input to select a body
     slect_input_prompt = "Select a body to dress up"
@@ -409,6 +408,8 @@ def dress_the_body_up(
     """
     Dress up a body with panels.
     """
+
+    design = adsk.fusion.Design.cast(app.activeProduct)
 
     # Get the timeline marker position
     timeline = design.timeline
