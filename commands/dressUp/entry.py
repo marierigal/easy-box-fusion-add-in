@@ -35,6 +35,7 @@ SELECT_ALL_FACES_INPUT_ID = f"{CMD_ID}_select_all_faces_input"
 THICKNESS_INPUT_ID = f"{CMD_ID}_thickness_input"
 TABLE_INPUT_ID = f"{CMD_ID}_table_input"
 CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
+CREATE_COMPONENT_INPUT_ID = f"{CMD_ID}_create_component_input"
 
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
@@ -149,8 +150,14 @@ def command_execute(args: adsk.core.CommandEventArgs):
         body, thickness_expression, inputs.itemById(TABLE_INPUT_ID)
     )
 
+    # Get the create component value
+    create_component_input: adsk.core.BoolValueCommandInput = inputs.itemById(
+        CREATE_COMPONENT_INPUT_ID
+    )
+    create_component = create_component_input.value
+
     # Dress up the body
-    dress_up(body, panel_configs, remove_body=True)
+    dress_up(body, panel_configs, create_component, remove_body=True)
 
 
 def command_preview(args: adsk.core.CommandEventArgs):
@@ -178,13 +185,19 @@ def command_preview(args: adsk.core.CommandEventArgs):
         body, thickness_expression, inputs.itemById(TABLE_INPUT_ID)
     )
 
+    # Get the create component value
+    create_component_input: adsk.core.BoolValueCommandInput = inputs.itemById(
+        CREATE_COMPONENT_INPUT_ID
+    )
+    create_component = create_component_input.value
+
     # Reduce the body opacity to help visualize the panels
     design = adsk.fusion.Design.cast(app.activeProduct)
     design.activateRootComponent()  # NOTE: This is a workaround to avoid the body opacity to be reset
     body.opacity = 0.4
 
     # Dress up the body
-    dress_up(body, panel_configs, remove_body=False)
+    dress_up(body, panel_configs, create_component, remove_body=False)
 
 
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
@@ -296,6 +309,15 @@ def create_inputs(inputs: adsk.core.CommandInputs):
     thickness_input.minimumValue = 0.01
     thickness_input.tooltipDescription = "The default thickness of the panels"
 
+    # Create a bool input to allow component creation
+    create_component_input = inputs.addBoolValueInput(
+        CREATE_COMPONENT_INPUT_ID, "Create Component", True, "", True
+    )
+    create_component_input.tooltip = "Create a component"
+    create_component_input.tooltipDescription = (
+        "If checked, a component will be created for each panel."
+    )
+
     # Create an advanced configuration group
     config_group_input = inputs.addGroupCommandInput(
         CONFIG_GROUP_INPUT_ID,
@@ -404,6 +426,7 @@ def get_panel_configs(
 def dress_up(
     body: adsk.fusion.BRepBody,
     panel_configs: list[PanelConfig],
+    create_component: bool = True,
     remove_body: bool = True,
 ):
     """
@@ -420,12 +443,16 @@ def dress_up(
     parent_component = body.parentComponent
 
     for config in panel_configs:
-        # Create a new component for the panel
-        panel_occurence = parent_component.occurrences.addNewComponent(
-            adsk.core.Matrix3D.create(),
-        )
-        panel_component = panel_occurence.component
-        panel_component.name = config.panel_name
+        if create_component:
+            # Create a new component for the panel
+            panel_occurence = parent_component.occurrences.addNewComponent(
+                adsk.core.Matrix3D.create(),
+            )
+            panel_component = panel_occurence.component
+            # Rename the component
+            panel_component.name = config.panel_name
+        else:
+            panel_component = parent_component
 
         # Create a new body for the panel
         extrude_feature = panel_component.features.extrudeFeatures.addSimple(
@@ -433,7 +460,13 @@ def dress_up(
             adsk.core.ValueInput.createByString(f"{config.thickness_expression} * -1"),
             adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
         )
+
+        # Rename the extrude feature
         extrude_feature.name = f"Extrude ({config.panel_name})"
+
+        if not create_component:
+            # Rename the body
+            extrude_feature.bodies.item(0).name = config.panel_name
 
     # Remove the body
     if remove_body:
