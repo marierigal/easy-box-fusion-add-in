@@ -57,6 +57,9 @@ class PanelConfig:
         self.panel_name = panel_name
         self.thickness_expression = thickness_expression
 
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, PanelConfig) and value.face_entity == self.face_entity
+
 
 def start():
     """
@@ -218,29 +221,56 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
     if changed_input.id == SELECT_FACES_INPUT_ID and isinstance(
         changed_input, adsk.core.SelectionCommandInput
     ):
+        # Get the table input
+        table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
+
+        # Reset the table if no faces are selected
+        if changed_input.selectionCount == 0:
+            table_input.clear()
+            return
+
+        # Get the body of the first selected face
+        body: adsk.fusion.BRepBody = changed_input.selection(0).entity.body
+
+        # Get the select all faces input
         select_all_faces_input: adsk.core.BoolValueCommandInput = inputs.itemById(
             SELECT_ALL_FACES_INPUT_ID
         )
 
-        if select_all_faces_input.value and changed_input.selectionCount > 0:
-            body: adsk.fusion.BRepBody = changed_input.selection(0).entity.body
+        # Select all faces if the input is checked
+        if select_all_faces_input.value:
             changed_input.clearSelection()
             for face in body.faces:
                 changed_input.addSelection(face)
                 select_all_faces_input.value = False
 
-        # Get the table input
-        table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
+        # Get the thickness value
+        thickness_input: adsk.core.ValueCommandInput = inputs.itemById(
+            THICKNESS_INPUT_ID
+        )
+        thickness_expression = thickness_input.expression
 
-        # Clear the table
+        # Get previous panel configurations
+        panel_configs = get_panel_configs(body, thickness_expression, table_input)
+
+        # Reset the table
         table_input.clear()
-
-        # Add the header row
         add_header_row_to_table(table_input)
 
         # Add the face rows
         for i in range(changed_input.selectionCount):
-            add_face_to_table(table_input, changed_input.selection(i).entity)
+            face: adsk.fusion.BRepFace = changed_input.selection(i).entity
+            face_id = face.tempId
+
+            panel_config = panel_configs.get(face_id)
+            add_face_to_table(
+                table_input,
+                (
+                    panel_config
+                    if panel_config
+                    else PanelConfig(face, f"Panel {face_id}", thickness_expression)
+                ),
+            )
 
 
 def command_destroy(args: adsk.core.CommandEventArgs):
@@ -376,7 +406,7 @@ def add_header_row_to_table(table_input: adsk.core.TableCommandInput):
 
 
 def add_face_to_table(
-    table_input: adsk.core.TableCommandInput, face: adsk.fusion.BRepFace
+    table_input: adsk.core.TableCommandInput, panelConfig: PanelConfig
 ):
     """
     Add a face row to the table input.
@@ -384,7 +414,7 @@ def add_face_to_table(
 
     table_inputs = table_input.commandInputs
     row_index = table_input.rowCount
-    face_id = face.tempId
+    face_id = panelConfig.face_entity.tempId
 
     # Add a string input for the face ID
     face_id_input = table_inputs.addStringValueInput(
@@ -399,7 +429,7 @@ def add_face_to_table(
     panel_name_input = table_inputs.addStringValueInput(
         f"{CMD_ID}_panel_name_{face_id}",
         "Panel Name",
-        f"Panel {face_id}",
+        panelConfig.panel_name,
     )
     table_input.addCommandInput(panel_name_input, row_index, 1)
 
@@ -408,24 +438,24 @@ def get_panel_configs(
     body: adsk.fusion.BRepBody,
     default_thickness: str,
     table_input: adsk.core.TableCommandInput,
-):
+) -> dict:
     """
     Get the panel configurations from the table input.
     """
 
-    panel_configs = []
+    panel_configs = {}
     for i in range(1, table_input.rowCount):
         face_id = int(table_input.getInputAtPosition(i, 0).value)
         panel_name = table_input.getInputAtPosition(i, 1).value
-        face = body.findByTempId(face_id)
-        panel_configs.append(PanelConfig(face[0], panel_name, default_thickness))
+        face: adsk.fusion.BRepFace = body.findByTempId(face_id)[0]
+        panel_configs[face.tempId] = PanelConfig(face, panel_name, default_thickness)
 
     return panel_configs
 
 
 def dress_up(
     body: adsk.fusion.BRepBody,
-    panel_configs: list[PanelConfig],
+    panel_configs: dict,
     create_component: bool = True,
     remove_body: bool = True,
 ):
@@ -442,7 +472,9 @@ def dress_up(
     # Get body parent component
     parent_component = body.parentComponent
 
-    for config in panel_configs:
+    for value in panel_configs.values():
+        panel_config: PanelConfig = value
+
         if create_component:
             # Create a new component for the panel
             panel_occurence = parent_component.occurrences.addNewComponent(
@@ -450,23 +482,25 @@ def dress_up(
             )
             panel_component = panel_occurence.component
             # Rename the component
-            panel_component.name = config.panel_name
+            panel_component.name = panel_config.panel_name
         else:
             panel_component = parent_component
 
         # Create a new body for the panel
         extrude_feature = panel_component.features.extrudeFeatures.addSimple(
-            config.face_entity,
-            adsk.core.ValueInput.createByString(f"{config.thickness_expression} * -1"),
+            panel_config.face_entity,
+            adsk.core.ValueInput.createByString(
+                f"{panel_config.thickness_expression} * -1"
+            ),
             adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
         )
 
         # Rename the extrude feature
-        extrude_feature.name = f"Extrude ({config.panel_name})"
+        extrude_feature.name = f"Extrude ({panel_config.panel_name})"
 
         if not create_component:
             # Rename the body
-            extrude_feature.bodies.item(0).name = config.panel_name
+            extrude_feature.bodies.item(0).name = panel_config.panel_name
 
     # Remove the body
     if remove_body:
