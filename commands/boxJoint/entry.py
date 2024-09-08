@@ -512,6 +512,41 @@ def update_status_message(
     status_input.formattedText = f"{prefix}{message}{suffix}"
 
 
+def get_common_parent_component(
+    design: adsk.fusion.Design, *components: adsk.fusion.Component
+) -> adsk.fusion.Component:
+    """
+    Get the first common parent component of the given components.
+    """
+    common_parent = design.rootComponent
+
+    while True:
+        parent_component = common_parent
+
+        for i in range(parent_component.allOccurrences.count):
+            child_component = design.rootComponent.allOccurrences.item(i).component
+
+            # if child component contains all the given components
+            is_common_parent = True
+            for component in components:
+                if not child_component.allOccurrencesByComponent(component).count:
+                    is_common_parent = False
+                    break
+
+            # then it is a common parent
+            if is_common_parent:
+                common_parent = child_component
+                break
+
+            # else, check the next child component
+        # if no children then the root component is the common parent
+        else:
+            common_parent = parent_component
+            break
+
+    return common_parent
+
+
 def create_mortises_and_tenons(
     body: adsk.fusion.BRepBody,
     face: adsk.fusion.BRepFace,
@@ -529,12 +564,17 @@ def create_mortises_and_tenons(
     timeline = design.timeline
     timeline_start_index = timeline.markerPosition
 
+    # Define working component as the first common parent component
+    root_component = get_common_parent_component(
+        design, body.parentComponent, face.body.parentComponent
+    )
+
     ######################################
     # Create the sketch
     ######################################
 
     # Create a sketch on the selected face
-    sketch = design.rootComponent.sketches.add(face)
+    sketch = root_component.sketches.add(face)
 
     # Project the edges of the face onto the sketch
     face_lines: list[adsk.fusion.SketchLine] = []
@@ -613,7 +653,7 @@ def create_mortises_and_tenons(
     ######################################
 
     # Create the extrude feature
-    extrude_features = design.rootComponent.features.extrudeFeatures
+    extrude_features = root_component.features.extrudeFeatures
     extrude_input = extrude_features.createInput(
         sketch.profiles.item(1),
         adsk.fusion.FeatureOperations.CutFeatureOperation,
@@ -635,6 +675,8 @@ def create_mortises_and_tenons(
 
     # Only create a pattern if there are more than one tenon
     if tenon_count > 1:
+        extrude_feature_component = extrude_feature.parentComponent
+
         pattern_input_entities = adsk.core.ObjectCollection.create()
         pattern_input_entities.add(extrude_feature)
 
@@ -644,7 +686,7 @@ def create_mortises_and_tenons(
             f"+ {tenon_width_expression}"
         )
 
-        pattern_features = design.rootComponent.features.rectangularPatternFeatures
+        pattern_features = extrude_feature_component.features.rectangularPatternFeatures
         pattern_input = pattern_features.createInput(
             pattern_input_entities,
             rectangle.item(0),
@@ -668,7 +710,7 @@ def create_mortises_and_tenons(
     tools = adsk.core.ObjectCollection.create()
     tools.add(body)
 
-    combine_features = design.rootComponent.features.combineFeatures
+    combine_features = root_component.features.combineFeatures
     combine_input = combine_features.createInput(target_body, tools)
     combine_input.operation = adsk.fusion.FeatureOperations.CutFeatureOperation
     combine_input.isKeepToolBodies = True
@@ -689,7 +731,7 @@ def create_mortises_and_tenons(
         body_occurrence = body_component.allOccurrences.itemByName(body.name)
         face_occurrence = face_component.allOccurrences.itemByName(face.body.name)
 
-        joints = design.rootComponent.asBuiltJoints
+        joints = root_component.asBuiltJoints
         joint_input = joints.createInput(body_occurrence, face_occurrence, None)
         joint_input.setAsRigidJointMotion()
         joint = joints.add(joint_input)
