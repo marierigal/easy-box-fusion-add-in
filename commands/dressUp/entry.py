@@ -30,7 +30,7 @@ ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resource
 DEFAULT_THICKNESS = 0.3
 
 # Input ids
-SELECT_INPUT_ID = f"{CMD_ID}_select_input"
+SELECT_FACES_INPUT_ID = f"{CMD_ID}_select_faces_input"
 THICKNESS_INPUT_ID = f"{CMD_ID}_thickness_input"
 TABLE_INPUT_ID = f"{CMD_ID}_table_input"
 CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
@@ -38,9 +38,6 @@ CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
 local_handlers = []
-
-# Global variables
-original_body: adsk.fusion.BRepBody = None
 
 
 class PanelConfig:
@@ -140,17 +137,19 @@ def command_execute(args: adsk.core.CommandEventArgs):
     thickness_input: adsk.core.ValueCommandInput = inputs.itemById(THICKNESS_INPUT_ID)
     thickness_expression = thickness_input.expression
 
+    # Get the body from the first selected face
+    select_faces_input: adsk.core.SelectionCommandInput = inputs.itemById(
+        SELECT_FACES_INPUT_ID
+    )
+    body: adsk.fusion.BRepBody = select_faces_input.selection(0).entity.body
+
     # Get the panel configurations
-    table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
-    panel_configs = []
-    for i in range(1, table_input.rowCount):
-        face_id = int(table_input.getInputAtPosition(i, 0).value)
-        panel_name = table_input.getInputAtPosition(i, 1).value
-        face = original_body.findByTempId(face_id)
-        panel_configs.append(PanelConfig(face, panel_name, thickness_expression))
+    panel_configs = get_panel_configs(
+        body, thickness_expression, inputs.itemById(TABLE_INPUT_ID)
+    )
 
     # Dress up the body
-    dress_the_body_up(original_body, panel_configs)
+    dress_up(body, panel_configs, remove_body=True)
 
 
 def command_preview(args: adsk.core.CommandEventArgs):
@@ -167,22 +166,24 @@ def command_preview(args: adsk.core.CommandEventArgs):
     thickness_input: adsk.core.ValueCommandInput = inputs.itemById(THICKNESS_INPUT_ID)
     thickness_expression = thickness_input.expression
 
-    # Get the panel configurations
-    table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
-    panel_configs = []
-    for i in range(1, table_input.rowCount):
-        face_id = int(table_input.getInputAtPosition(i, 0).value)
-        panel_name = table_input.getInputAtPosition(i, 1).value
-        face = original_body.findByTempId(face_id)
-        panel_configs.append(PanelConfig(face[0], panel_name, thickness_expression))
+    # Get the body from the first selected face
+    select_faces_input: adsk.core.SelectionCommandInput = inputs.itemById(
+        SELECT_FACES_INPUT_ID
+    )
+    body: adsk.fusion.BRepBody = select_faces_input.selection(0).entity.body
 
-    # Reduce the body opacity to help visualize the joint
-    original_body.opacity = 0.4
+    # Get the panel configurations
+    panel_configs = get_panel_configs(
+        body, thickness_expression, inputs.itemById(TABLE_INPUT_ID)
+    )
+
+    # Reduce the body opacity to help visualize the panels
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    design.activateRootComponent()  # NOTE: This is a workaround to avoid the body opacity to be reset
+    body.opacity = 0.4
 
     # Dress up the body
-    dress_the_body_up(original_body, panel_configs)
-
-    args.isValidResult = True
+    dress_up(body, panel_configs, remove_body=False)
 
 
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
@@ -193,19 +194,28 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
     """
 
     changed_input = args.input
+    inputs = args.inputs
 
     # General logging for debug.
     futil.log(
         f"{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}"
     )
 
-    if changed_input.id == SELECT_INPUT_ID:
-        if original_body != None:
-            # Handle the selection of faces
-            on_faces_selection(changed_input)
-        else:
-            # Handle the selection of a body
-            on_body_selection(changed_input)
+    if changed_input.id == SELECT_FACES_INPUT_ID and isinstance(
+        changed_input, adsk.core.SelectionCommandInput
+    ):
+        # Get the table input
+        table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
+
+        # Clear the table
+        table_input.clear()
+
+        # Add the header row
+        add_header_row_to_table(table_input)
+
+        # Add the face rows
+        for i in range(changed_input.selectionCount):
+            add_face_to_table(table_input, changed_input.selection(i).entity)
 
 
 def command_destroy(args: adsk.core.CommandEventArgs):
@@ -216,15 +226,29 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     # General logging for debug.
     futil.log(f"{CMD_NAME} Command Destroy Event")
 
-    global local_handlers, original_body
-
-    # Reset the opacity of the body
-    if original_body:
-        original_body.opacity = 1.0
-
     # Reset the global variables
+    global local_handlers
     local_handlers = []
-    original_body = None
+
+
+def command_pre_select(args: adsk.core.SelectionEventArgs):
+    """
+    This event handler is called when the user
+    hover over an object in the graphics window.
+    """
+
+    # General logging for debug.
+    futil.log(f"{CMD_NAME} Command Pre-Select Event")
+
+    active_input = args.activeInput
+    selected_entity = args.selection.entity
+
+    if active_input.id == SELECT_FACES_INPUT_ID and active_input.selectionCount > 0:
+        first_selected_entity = active_input.selection(0).entity
+
+        # Prevent selecting a face that is not from the same body
+        if selected_entity.body != first_selected_entity.body:
+            args.isSelectable = False
 
 
 def create_inputs(inputs: adsk.core.CommandInputs):
@@ -236,13 +260,13 @@ def create_inputs(inputs: adsk.core.CommandInputs):
     default_units = app.activeProduct.unitsManager.defaultLengthUnits
 
     # Create a selection input to select a body
-    slect_input_prompt = "Select a body to dress up"
-    select_input = inputs.addSelectionInput(
-        SELECT_INPUT_ID, "Select", slect_input_prompt
+    select_faces_input_prompt = "Select faces to dress up"
+    select_faces_input = inputs.addSelectionInput(
+        SELECT_FACES_INPUT_ID, "Select", select_faces_input_prompt
     )
-    select_input.addSelectionFilter("SolidBodies")
-    select_input.setSelectionLimits(1, 1)
-    select_input.tooltip = slect_input_prompt
+    select_faces_input.addSelectionFilter("SolidFaces")
+    select_faces_input.setSelectionLimits(1, 0)
+    select_faces_input.tooltip = select_faces_input_prompt
 
     # Create a value input to set the thickness value
     thickness_input = inputs.addValueInput(
@@ -260,7 +284,6 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         "Advanced Configuration",
     )
     config_group_input.isExpanded = False
-    config_group_input.isVisible = False
     config_group_children = config_group_input.children
 
     # Create a table input to display per faces configuration
@@ -284,6 +307,9 @@ def connect_to_events(command: adsk.core.Command):
         command.executePreview, command_preview, local_handlers=local_handlers
     )
     futil.add_handler(command.destroy, command_destroy, local_handlers=local_handlers)
+    futil.add_handler(
+        command.preSelect, command_pre_select, local_handlers=local_handlers
+    )
 
 
 def add_header_row_to_table(table_input: adsk.core.TableCommandInput):
@@ -309,13 +335,16 @@ def add_header_row_to_table(table_input: adsk.core.TableCommandInput):
     table_input.addCommandInput(panel_name_header, row_index, 1)
 
 
-def add_face_to_table(table_input: adsk.core.TableCommandInput, face_id: int):
+def add_face_to_table(
+    table_input: adsk.core.TableCommandInput, face: adsk.fusion.BRepFace
+):
     """
     Add a face row to the table input.
     """
 
     table_inputs = table_input.commandInputs
     row_index = table_input.rowCount
+    face_id = face.tempId
 
     # Add a string input for the face ID
     face_id_input = table_inputs.addStringValueInput(
@@ -335,90 +364,29 @@ def add_face_to_table(table_input: adsk.core.TableCommandInput, face_id: int):
     table_input.addCommandInput(panel_name_input, row_index, 1)
 
 
-def on_body_selection(select_input: adsk.core.SelectionCommandInput):
+def get_panel_configs(
+    body: adsk.fusion.BRepBody,
+    default_thickness: str,
+    table_input: adsk.core.TableCommandInput,
+):
     """
-    Handle the selection of a body.
-    """
-
-    global original_body
-
-    # Check if the selection is a body
-    if (
-        original_body
-        or select_input.selectionCount == 0
-        or select_input.selection(0).entity.objectType
-        != adsk.fusion.BRepBody.classType()
-    ):
-        select_input.clearSelection()
-        return
-
-    # Get the advanced configuration group input
-    config_group_input: adsk.core.GroupCommandInput = (
-        select_input.commandInputs.itemById(CONFIG_GROUP_INPUT_ID)
-    )
-
-    # Get the table input
-    table_input: adsk.core.TableCommandInput = select_input.commandInputs.itemById(
-        TABLE_INPUT_ID
-    )
-
-    # Add all faces of the selected body to the faces input
-    body = select_input.selection(0).entity
-
-    # Update input to select faces
-    select_input.clearSelection()
-    select_input.tooltip = "Select the faces to dress up"
-    select_input.clearSelectionFilter()
-    select_input.addSelectionFilter("SolidFaces")
-    select_input.setSelectionLimits(1, 0)
-
-    for face in body.faces:
-        select_input.addSelection(face)
-        add_face_to_table(table_input, face.tempId)
-
-    # Show the advanced configuration group
-    config_group_input.isVisible = True
-
-    # Set the focus on the select input
-    select_input.hasFocus = True
-
-    original_body = body
-
-
-def on_faces_selection(select_input: adsk.core.SelectionCommandInput):
-    """
-    Handle the selection of faces.
+    Get the panel configurations from the table input.
     """
 
-    table_input: adsk.core.TableCommandInput = select_input.commandInputs.itemById(
-        TABLE_INPUT_ID
-    )
+    panel_configs = []
+    for i in range(1, table_input.rowCount):
+        face_id = int(table_input.getInputAtPosition(i, 0).value)
+        panel_name = table_input.getInputAtPosition(i, 1).value
+        face = body.findByTempId(face_id)
+        panel_configs.append(PanelConfig(face[0], panel_name, default_thickness))
 
-    # NOTE: This is a workaround to clear the table (keeping the headers)
-    #       as table_input.clear() seems to broke the app if called multiple times
-    count = table_input.rowCount
-    for _ in range(1, count):
-        table_input.deleteRow(table_input.rowCount - 1)
-
-    if (
-        select_input.selectionCount == 0
-        or select_input.selection(0).entity.objectType
-        != adsk.fusion.BRepFace.classType()
-    ):
-        select_input.clearSelection()
-        global original_body
-        original_body = None
-        return
-
-    # Add all selected faces to the table
-    for i in range(select_input.selectionCount):
-        face: adsk.fusion.BRepFace = select_input.selection(i).entity
-        add_face_to_table(table_input, face.tempId)
+    return panel_configs
 
 
-def dress_the_body_up(
+def dress_up(
     body: adsk.fusion.BRepBody,
     panel_configs: list[PanelConfig],
+    remove_body: bool = True,
 ):
     """
     Dress up a body with panels.
@@ -449,8 +417,9 @@ def dress_the_body_up(
         )
         extrude_feature.name = f"Extrude ({config.panel_name})"
 
-    # Remove the original body
-    parent_component.features.removeFeatures.add(body)
+    # Remove the body
+    if remove_body:
+        parent_component.features.removeFeatures.add(body)
 
     # Create a new timeline group
     group = timeline.timelineGroups.add(start_index, timeline.markerPosition - 1)
