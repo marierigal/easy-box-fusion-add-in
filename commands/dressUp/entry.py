@@ -31,6 +31,7 @@ DEFAULT_THICKNESS = 0.3
 
 # Input ids
 SELECT_FACES_INPUT_ID = f"{CMD_ID}_select_faces_input"
+SELECT_ALL_FACES_INPUT_ID = f"{CMD_ID}_select_all_faces_input"
 THICKNESS_INPUT_ID = f"{CMD_ID}_thickness_input"
 TABLE_INPUT_ID = f"{CMD_ID}_table_input"
 CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
@@ -204,6 +205,17 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
     if changed_input.id == SELECT_FACES_INPUT_ID and isinstance(
         changed_input, adsk.core.SelectionCommandInput
     ):
+        select_all_faces_input: adsk.core.BoolValueCommandInput = inputs.itemById(
+            SELECT_ALL_FACES_INPUT_ID
+        )
+
+        if select_all_faces_input.value and changed_input.selectionCount > 0:
+            body: adsk.fusion.BRepBody = changed_input.selection(0).entity.body
+            changed_input.clearSelection()
+            for face in body.faces:
+                changed_input.addSelection(face)
+                select_all_faces_input.value = False
+
         # Get the table input
         table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
 
@@ -267,6 +279,12 @@ def create_inputs(inputs: adsk.core.CommandInputs):
     select_faces_input.addSelectionFilter("SolidFaces")
     select_faces_input.setSelectionLimits(1, 0)
     select_faces_input.tooltip = select_faces_input_prompt
+
+    # Create a boolean input to select all faces
+    select_all_faces_input = inputs.addBoolValueInput(
+        SELECT_ALL_FACES_INPUT_ID, "Select All", True, "", True
+    )
+    select_all_faces_input.tooltip = "Select all faces of the body"
 
     # Create a value input to set the thickness value
     thickness_input = inputs.addValueInput(
