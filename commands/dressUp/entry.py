@@ -33,6 +33,7 @@ DEFAULT_THICKNESS = 0.3
 SELECT_INPUT_ID = f"{CMD_ID}_select_input"
 THICKNESS_INPUT_ID = f"{CMD_ID}_thickness_input"
 TABLE_INPUT_ID = f"{CMD_ID}_table_input"
+CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
 
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
@@ -251,13 +252,22 @@ def create_inputs(inputs: adsk.core.CommandInputs):
         adsk.core.ValueInput.createByReal(DEFAULT_THICKNESS),
     )
     thickness_input.minimumValue = 0.01
+    thickness_input.tooltipDescription = "The default thickness of the panels"
+
+    # Create an advanced configuration group
+    config_group_input = inputs.addGroupCommandInput(
+        CONFIG_GROUP_INPUT_ID,
+        "Advanced Configuration",
+    )
+    config_group_input.isExpanded = False
+    config_group_input.isVisible = False
+    config_group_children = config_group_input.children
 
     # Create a table input to display per faces configuration
-    table_input = inputs.addTableCommandInput(
-        TABLE_INPUT_ID, "Advanced Configuration", 2, "1:3"
+    table_input = config_group_children.addTableCommandInput(
+        TABLE_INPUT_ID, "Panels", 2, "1:3"
     )
     table_input.maximumVisibleRows = 8
-    table_input.isVisible = False
     add_header_row_to_table(table_input)
 
 
@@ -342,6 +352,11 @@ def on_body_selection(select_input: adsk.core.SelectionCommandInput):
         select_input.clearSelection()
         return
 
+    # Get the advanced configuration group input
+    config_group_input: adsk.core.GroupCommandInput = (
+        select_input.commandInputs.itemById(CONFIG_GROUP_INPUT_ID)
+    )
+
     # Get the table input
     table_input: adsk.core.TableCommandInput = select_input.commandInputs.itemById(
         TABLE_INPUT_ID
@@ -361,8 +376,8 @@ def on_body_selection(select_input: adsk.core.SelectionCommandInput):
         select_input.addSelection(face)
         add_face_to_table(table_input, face.tempId)
 
-    # Show the table input
-    table_input.isVisible = True
+    # Show the advanced configuration group
+    config_group_input.isVisible = True
 
     # Set the focus on the select input
     select_input.hasFocus = True
