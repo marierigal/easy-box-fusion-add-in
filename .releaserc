@@ -35,31 +35,8 @@
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "./scripts/prepare-release.sh EasyBox_${nextRelease.gitTag}.zip",
+                "prepareCmd": "./scripts/prepare-release.sh ${nextRelease.version} EasyBox_${nextRelease.gitTag}.zip",
                 "successCmd": "rm EasyBox_${nextRelease.gitTag}.zip"
-            }
-        ],
-        [
-            "semantic-release-replace-plugin",
-            {
-                "replacements": [
-                    {
-                        "files": [
-                            "EasyBox.manifest"
-                        ],
-                        "from": "\"version\":\t\".*\"",
-                        "to": "\"version\":\t\"${nextRelease.version}\"",
-                        "results": [
-                            {
-                                "file": "EasyBox.manifest",
-                                "hasChanged": true,
-                                "numMatches": 1,
-                                "numReplacements": 1
-                            }
-                        ],
-                        "countMatches": true
-                    }
-                ]
             }
         ],
         [

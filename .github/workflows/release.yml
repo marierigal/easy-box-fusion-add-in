@@ -35,8 +35,7 @@ jobs:
         run: |
           npm install \
             @semantic-release/exec \
-            @semantic-release/git \
-            semantic-release-replace-plugin
+            @semantic-release/git
 
       - name: Release
         env:
