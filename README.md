@@ -1,6 +1,6 @@
 # EasyBox — Autodesk Fusion Add-In
 
-<p align="center"><a href="https://www.autodesk.fr/products/fusion-360"><img src="doc/assets/autodesk-fusion-logo.svg" height="160" width="auto" alt="Autodesk Fusion 360" /></a></p>
+<p align="center"><a href="https://www.autodesk.fr/products/fusion-360"><img src="/docs/assets/autodesk-fusion-logo.svg" height="160" width="auto" alt="Autodesk Fusion 360" /></a></p>
 
 EasyBox is an [Autodesk Fusion](https://www.autodesk.com/fr/products/fusion-360/overview) add-in that helps with creating boxes or other panel based projects.
 
@@ -8,7 +8,7 @@ EasyBox is an [Autodesk Fusion](https://www.autodesk.com/fr/products/fusion-360/
 
 ###  Dress Up
 
-> Design → Solid → Create → ![Dress Up Icon](commands/dressUp/resources/16x16.png) Dress Up
+> Design → Solid → Create → ![Dress Up Icon](/commands/dressUp/resources/16x16.png) Dress Up
 
 Create panels from a solid
 
@@ -19,7 +19,7 @@ Create panels from a solid
 
 ### Box Joint
 
-> Design → Solid → Modify → ![Box Joint Icon](commands/boxJoint/resources/16x16.png) Box Joint
+> Design → Solid → Modify → ![Box Joint Icon](/commands/boxJoint/resources/16x16.png) Box Joint
 
 Create box joints between two or more bodies
 
@@ -49,7 +49,7 @@ Create box joints between two or more bodies
 
 Start by creating a solid box that is the size you want the final box to be. You can also create the box from a sketch by extruding it.
 
-<p><img src="doc/assets/step1.gif" height="320" width="auto" /></p>
+![Step 1 demo](/docs/assets/step1.gif)
 
 ### Step 2
 
@@ -62,7 +62,7 @@ Then, create panels from the solid box:
 5. You can set the name and the thickness of each panels by expanding the `Advanced Configuration` section.
 6. When you are satisfied with the result, click the `OK` button.
 
-<p><img src="doc/assets/step2.gif" height="320" width="auto" /></p>
+![Step 2 demo](/docs/assets/step2.gif)
 
 ### Step 3
 
@@ -77,13 +77,13 @@ Add box joints:
 7. Check the `Add Joint` checkbox if you want to add an *as built joint* between each pair of bodies.
 8. Repeat the process for the other panels.
 
-<p><img src="doc/assets/step3.gif" height="320" width="auto" /></p>
+![Step 3 demo](/docs/assets/step3.gif)
 
 ### You're done!
 
 You can modify the original solid box as you want, the panels and the joints will update automatically.
 
-<p><img src="doc/assets/final.gif" height="320" width="auto" /></p>
+![Final demo](/docs/assets/final.gif)
 
 ## Development
 
