@@ -5,12 +5,14 @@
 # You need to use aliases (import "entry" as "my_module") assuming you have the default module named "entry".
 from .boxJoint import entry as boxJoint
 from .dressUp import entry as dressUp
+from .exportDXF import entry as exportDXF
 
 # TODO add your imported modules to this list.
 # Fusion will automatically call the start() and stop() functions.
 commands = [
     boxJoint,
     dressUp,
+    exportDXF,
 ]
 
 
