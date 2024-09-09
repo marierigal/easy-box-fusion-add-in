@@ -34,7 +34,6 @@ jobs:
       - name: Install dependencies
         run: |
           npm install \
-            @semantic-release/changelog \
             @semantic-release/exec \
             @semantic-release/git \
             semantic-release-replace-plugin
