@@ -34,9 +34,19 @@ SELECT_FACES_INPUT_ID = f"{CMD_ID}_select_faces_input"
 SELECT_ALL_FACES_INPUT_ID = f"{CMD_ID}_select_all_faces_input"
 THICKNESS_INPUT_ID = f"{CMD_ID}_thickness_input"
 APPLY_THICKNESS_BUTTON_ID = f"{CMD_ID}_apply_thickness_button"
-TABLE_INPUT_ID = f"{CMD_ID}_table_input"
+TABLE_INPUT_ID = f"{CMD_ID}_config_input"
+TABLE_PANEL_FACE_ID_INPUT_ID = f"{CMD_ID}_config_panel_face_id_input"
+TABLE_PANEL_NAME_INPUT_ID = f"{CMD_ID}_config_panel_name_input"
+TABLE_PANEL_THICKNESS_INPUT_ID = f"{CMD_ID}_config_panel_thickness_input"
 CONFIG_GROUP_INPUT_ID = f"{CMD_ID}_config_group"
 CREATE_COMPONENT_INPUT_ID = f"{CMD_ID}_create_component_input"
+
+# Table parameters
+TABLE_COLUMNS_COUNT = 3
+TABLE_LAYOUT = "1:3:3"
+TABLE_PANEL_FACE_ID_COLUMN = 0
+TABLE_PANEL_NAME_INPUT_COLUMN = 1
+TABLE_PANEL_THICKNESS_INPUT_COLUMN = 2
 
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
@@ -174,22 +184,13 @@ def command_preview(args: adsk.core.CommandEventArgs):
     )
     body: adsk.fusion.BRepBody = select_faces_input.selection(0).entity.body
 
-    # Get the panel configurations
-    panel_configs = get_panel_configs_from_table(inputs.itemById(TABLE_INPUT_ID))
-
-    # Get the create component value
-    create_component_input: adsk.core.BoolValueCommandInput = inputs.itemById(
-        CREATE_COMPONENT_INPUT_ID
-    )
-    create_component = create_component_input.value
-
     # Reduce the body opacity to help visualize the panels
     design = adsk.fusion.Design.cast(app.activeProduct)
     design.activateRootComponent()  # NOTE: This is a workaround to avoid the body opacity to be reset
     body.opacity = 0.4
 
-    # Dress up the body
-    dress_up(body, panel_configs, create_component, remove_body=False)
+    # Draw the pointers for the selected faces
+    draw_all_faces_labels(design, inputs)
 
 
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
@@ -379,7 +380,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
 
     # Create a table input to display per faces configuration
     table_input = config_group_children.addTableCommandInput(
-        TABLE_INPUT_ID, "Panels", 2, "1:1"
+        TABLE_INPUT_ID, "Panels", TABLE_COLUMNS_COUNT, TABLE_LAYOUT
     )
     table_input.maximumVisibleRows = 8
     add_header_row_to_table(table_input)
@@ -411,19 +412,32 @@ def add_header_row_to_table(table_input: adsk.core.TableCommandInput):
     table_inputs = table_input.commandInputs
     row_index = table_input.rowCount
 
-    # Panel name
+    # Face ID
     panel_name_header = table_inputs.addStringValueInput(
-        f"{CMD_ID}_panel_name_header", "Panel Name Header", "Panel"
+        f"_{TABLE_PANEL_FACE_ID_INPUT_ID}", "Face ID Header", "ID"
     )
     panel_name_header.isReadOnly = True
-    table_input.addCommandInput(panel_name_header, row_index, 0)
+    table_input.addCommandInput(
+        panel_name_header, row_index, TABLE_PANEL_FACE_ID_COLUMN
+    )
+
+    # Panel name
+    panel_name_header = table_inputs.addStringValueInput(
+        f"_{TABLE_PANEL_NAME_INPUT_ID}", "Panel Name Header", "Panel"
+    )
+    panel_name_header.isReadOnly = True
+    table_input.addCommandInput(
+        panel_name_header, row_index, TABLE_PANEL_NAME_INPUT_COLUMN
+    )
 
     # Panel thickness
     panel_thickness_header = table_inputs.addStringValueInput(
-        f"{CMD_ID}_panel_thickness_header", "Panel Thickness Header", "Thickness"
+        f"_{TABLE_PANEL_THICKNESS_INPUT_ID}", "Panel Thickness Header", "Thickness"
     )
     panel_thickness_header.isReadOnly = True
-    table_input.addCommandInput(panel_thickness_header, row_index, 1)
+    table_input.addCommandInput(
+        panel_thickness_header, row_index, TABLE_PANEL_THICKNESS_INPUT_COLUMN
+    )
 
 
 def add_config_row_to_table(
@@ -437,22 +451,35 @@ def add_config_row_to_table(
     row_index = table_input.rowCount
     face_id = panelConfig.face_id
 
+    # Add a readonly string input for the face id
+    face_id_input = table_inputs.addStringValueInput(
+        f"{TABLE_PANEL_FACE_ID_INPUT_ID}_{face_id}",
+        "ID",
+        str(face_id),
+    )
+    face_id_input.isReadOnly = True
+    table_input.addCommandInput(face_id_input, row_index, TABLE_PANEL_FACE_ID_COLUMN)
+
     # Add a string input for the name of the panel
     panel_name_input = table_inputs.addStringValueInput(
-        f"{CMD_ID}_panel_name_{face_id}",
+        f"{TABLE_PANEL_NAME_INPUT_ID}_{face_id}",
         "Panel Name",
         panelConfig.panel_name,
     )
-    table_input.addCommandInput(panel_name_input, row_index, 0)
+    table_input.addCommandInput(
+        panel_name_input, row_index, TABLE_PANEL_NAME_INPUT_COLUMN
+    )
 
     # Add a value input for the thickness of the panel
     panel_thickness_input = table_inputs.addValueInput(
-        f"{CMD_ID}_panel_thickness_{face_id}",
+        f"{TABLE_PANEL_THICKNESS_INPUT_ID}_{face_id}",
         "Thickness",
         app.activeProduct.unitsManager.defaultLengthUnits,
         adsk.core.ValueInput.createByString(panelConfig.thickness_expression),
     )
-    table_input.addCommandInput(panel_thickness_input, row_index, 1)
+    table_input.addCommandInput(
+        panel_thickness_input, row_index, TABLE_PANEL_THICKNESS_INPUT_COLUMN
+    )
 
 
 def get_panel_configs_from_table(
@@ -464,12 +491,65 @@ def get_panel_configs_from_table(
 
     panel_configs = {}
     for i in range(1, table_input.rowCount):
-        face_id = int(table_input.getInputAtPosition(i, 0).id.split("_")[-1])
-        name = table_input.getInputAtPosition(i, 0).value
-        thickness = table_input.getInputAtPosition(i, 1).expression
+        face_id_input = table_input.getInputAtPosition(i, TABLE_PANEL_FACE_ID_COLUMN)
+        face_id = int(face_id_input.value)
+        name = table_input.getInputAtPosition(i, TABLE_PANEL_NAME_INPUT_COLUMN).value
+        thickness = table_input.getInputAtPosition(
+            i, TABLE_PANEL_THICKNESS_INPUT_COLUMN
+        ).expression
         panel_configs[face_id] = PanelConfig(face_id, name, thickness)
 
     return panel_configs
+
+
+def draw_face_label(
+    face: adsk.fusion.BRepFace,
+    graphics: adsk.fusion.CustomGraphicsGroup,
+    config: PanelConfig,
+):
+    point = face.pointOnFace.copy()
+    _, normal = face.evaluator.getNormalAtPoint(point)
+    point.translateBy(normal)
+    matrix = adsk.core.Matrix3D.create()
+    matrix.translation = point.asVector()
+
+    text = graphics.addText(config.panel_name, "Arial", 2, matrix)
+    text.viewScale = adsk.fusion.CustomGraphicsViewScale.create(
+        10, adsk.core.Point3D.create(0, 0, 0)
+    )
+
+
+def draw_all_faces_labels(
+    design: adsk.fusion.Design,
+    inputs: adsk.core.CommandInputs,
+):
+    """
+    Daw a cone for each face in the table and highlight the selected face.
+    """
+
+    # Get the graphics group
+    graphics_groups = design.rootComponent.customGraphicsGroups
+    if graphics_groups.count > 0:
+        for i in range(graphics_groups.count):
+            graphics_groups.item(i).deleteMe()
+    graphics = graphics_groups.add()
+
+    # Get the table input
+    table_input: adsk.core.TableCommandInput = inputs.itemById(TABLE_INPUT_ID)
+
+    # Get the body from the first selected face
+    select_faces_input: adsk.core.SelectionCommandInput = inputs.itemById(
+        SELECT_FACES_INPUT_ID
+    )
+    body: adsk.fusion.BRepBody = select_faces_input.selection(0).entity.body
+
+    panel_configs = get_panel_configs_from_table(table_input)
+
+    for i in range(1, table_input.rowCount):
+        face_id_input = table_input.getInputAtPosition(i, TABLE_PANEL_FACE_ID_COLUMN)
+        face_id = int(face_id_input.value)
+        face: adsk.fusion.BRepFace = body.findByTempId(face_id)[0]
+        draw_face_label(face, graphics, panel_configs.get(face_id))
 
 
 def dress_up(
