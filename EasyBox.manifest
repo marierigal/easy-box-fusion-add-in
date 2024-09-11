@@ -6,7 +6,7 @@
 	"description":	{
 		"":	"An add-in that helps with creating boxes or other panel based projects."
 	},
-	"version":	"1.1.0",
+	"version":	"1.2.0",
 	"runOnStartup":	false,
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true
