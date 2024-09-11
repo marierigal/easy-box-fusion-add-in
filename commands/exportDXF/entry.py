@@ -26,9 +26,22 @@ IS_BEFORE = True
 # Resource location for command icons, here we assume a sub folder in this directory named "resources".
 ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "")
 
+# Input ids
+SELECT_FACES_INPUT_ID = f"{CMD_ID}_select_faces_input"
+FOLDER_INPUT_ID = f"{CMD_ID}_folder_input"
+FOLDER_BUTTON_ID = f"{CMD_ID}_folder_button"
+
+# Constants
+SELECTION_SET_NAME = CMD_NAME
+DEFAULT_EXPORT_FOLDER = os.path.join("~", "Downloads", "DXF")
+
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
 local_handlers = []
+
+export_folder = DEFAULT_EXPORT_FOLDER
+folder_dialog: adsk.core.FolderDialog = None
+
 
 def start():
     """
@@ -106,16 +119,51 @@ def command_execute(args: adsk.core.CommandEventArgs):
     futil.log(f"{CMD_NAME} Command Execute Event")
     inputs = args.command.commandInputs
 
+    design = adsk.fusion.Design.cast(app.activeProduct)
 
-def command_preview(args: adsk.core.CommandEventArgs):
-    """
-    This event handler is called when the command
-    needs to compute a new preview in the graphics window.
-    """
+    # Get the selected faces
+    select_faces_input: adsk.core.SelectionCommandInput = inputs.itemById(
+        SELECT_FACES_INPUT_ID
+    )
+    selected_faces = [
+        select_faces_input.selection(i).entity
+        for i in range(select_faces_input.selectionCount)
+    ]
 
-    # General logging for debug.
-    futil.log(f"{CMD_NAME} Command Preview Event")
-    inputs = args.command.commandInputs
+    # Check if selection already exists
+    selection_set = design.selectionSets.itemByName(SELECTION_SET_NAME)
+    if selection_set:
+        selection_set.deleteMe()
+
+    # Save selection in a selection set
+    selection_set = design.selectionSets.add(selected_faces, SELECTION_SET_NAME)
+
+    # Check if folder exists, if not create it
+    if not os.path.exists(export_folder):
+        os.makedirs(export_folder)
+
+    # Export the faces to DXF files
+    files: dict = {}
+    for face in selected_faces:
+        result, file_path = export_face_to_dxf(face)
+
+        if result == True:
+            files.update({file_path: result})
+        else:
+            futil.msg_box(
+                f"Failed to export face to DXF: {file_path}",
+                icon=adsk.core.MessageBoxIconTypes.CriticalIconType,
+            )
+            return
+
+    # Show a message box with the exported files
+    message = f"Exported {len(files)} faces to DXF files:"
+    for file in files.keys():
+        message += f"\n  - {file}"
+    futil.msg_box(
+        message,
+        icon=adsk.core.MessageBoxIconTypes.InformationIconType,
+    )
 
 
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
@@ -133,6 +181,19 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
         f"{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}"
     )
 
+    # Check if the folder button was clicked
+    if changed_input.id == FOLDER_BUTTON_ID:
+        # Show the folder dialog
+        folder_dialog.showDialog()
+
+        # Update the folder input
+        folder_input: adsk.core.TextBoxCommandInput = inputs.itemById(FOLDER_INPUT_ID)
+        folder_input.formattedText = folder_dialog.folder
+
+        # Save the export folder
+        global export_folder
+        export_folder = folder_dialog.folder
+
 
 def command_destroy(args: adsk.core.CommandEventArgs):
     """
@@ -143,21 +204,9 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     futil.log(f"{CMD_NAME} Command Destroy Event")
 
     # Reset the global variables
-    global local_handlers
+    global local_handlers, folder_dialog
     local_handlers = []
-
-
-def command_pre_select(args: adsk.core.SelectionEventArgs):
-    """
-    This event handler is called when the user
-    hover over an object in the graphics window.
-    """
-
-    # General logging for debug.
-    futil.log(f"{CMD_NAME} Command Pre-Select Event")
-
-    active_input = args.activeInput
-    selected_entity = args.selection.entity
+    folder_dialog = None
 
 
 def create_inputs(inputs: adsk.core.CommandInputs):
@@ -165,8 +214,36 @@ def create_inputs(inputs: adsk.core.CommandInputs):
     Create the inputs for the command dialog.
     """
 
-    # Get the default length units
-    default_units = app.activeProduct.unitsManager.defaultLengthUnits
+    # Create the selection input
+    select_faces_input_tooltip = "Select the faces to export to DXF"
+    select_faces_input = inputs.addSelectionInput(
+        SELECT_FACES_INPUT_ID,
+        "Select Faces",
+        select_faces_input_tooltip,
+    )
+    select_faces_input.addSelectionFilter("SolidFaces")
+    select_faces_input.setSelectionLimits(1, 0)
+    select_faces_input.tooltip = select_faces_input_tooltip
+
+    # Create the folder dialog
+    global folder_dialog
+    folder_dialog = ui.createFolderDialog()
+    folder_dialog.title = "Select Export Folder"
+    folder_dialog.initialDirectory = export_folder
+
+    # Create the folder input
+    folder_input = inputs.addTextBoxCommandInput(
+        FOLDER_INPUT_ID, "Export Folder", export_folder, 2, True
+    )
+
+    # Create the folder button
+    folder_button = inputs.addBoolValueInput(
+        FOLDER_BUTTON_ID,
+        "Browse",
+        False,
+    )
+    folder_button.tooltip = "Select the folder to export the DXF files"
+    folder_button.isFullWidth = True
 
 
 def connect_to_events(command: adsk.core.Command):
@@ -178,10 +255,41 @@ def connect_to_events(command: adsk.core.Command):
     futil.add_handler(
         command.inputChanged, command_input_changed, local_handlers=local_handlers
     )
-    futil.add_handler(
-        command.executePreview, command_preview, local_handlers=local_handlers
-    )
     futil.add_handler(command.destroy, command_destroy, local_handlers=local_handlers)
-    futil.add_handler(
-        command.preSelect, command_pre_select, local_handlers=local_handlers
-    )
+
+
+def export_face_to_dxf(face: adsk.fusion.BRepFace) -> tuple[bool, str]:
+    """
+    Export the face to a DXF file.
+    """
+
+    try:
+        # Get the root component
+        design = adsk.fusion.Design.cast(app.activeProduct)
+        root_component = design.rootComponent
+
+        # Get the name of the face
+        face_name = str(face.tempId)
+        ancestors = root_component.allOccurrencesByComponent(face.body.parentComponent)
+        for ancestor in ancestors:
+            face_name = f"{ancestor.name}-{face_name}"
+        face_name = face_name.replace(":", "_").replace(" ", "_")
+
+        # Get the file path
+        file_path = os.path.join(export_folder, f"{face_name}.dxf")
+
+        # Create a sketch on the face
+        sketch = root_component.sketches.add(face)
+
+        # Project the face into the sketch
+        sketch.project(face)
+
+        # Save the sketch as a DXF file
+        result = sketch.saveAsDXF(file_path)
+
+        # Delete the sketch
+        sketch.deleteMe()
+
+        return [result, file_path]
+    except:
+        return [False, ""]
