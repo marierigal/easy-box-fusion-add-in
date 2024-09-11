@@ -53,7 +53,7 @@
                 "assets": [
                     {
                         "path": "*.zip",
-                        "label": "EasyBox ${nextRelease.gitTag} add-in"
+                        "label": "EasyBox ${nextRelease.gitTag}"
                     }
                 ]
             }
