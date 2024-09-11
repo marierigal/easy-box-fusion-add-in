@@ -1,6 +1,8 @@
 import adsk.core
 import adsk.fusion
+import platform
 import os
+import subprocess
 
 from ...lib import fusionAddInUtils as futil
 from ... import config
@@ -34,6 +36,9 @@ FOLDER_BUTTON_ID = f"{CMD_ID}_folder_button"
 # Constants
 SELECTION_SET_NAME = CMD_NAME
 DEFAULT_EXPORT_FOLDER = os.path.join(os.path.expanduser("~"), "Desktop", "DXF")
+MASTER_SKETCH_FILENAME = "master.dxf"
+MASTER_SKETCH_MAX_X = 50
+MASTER_SKETCH_SPACING = 0.1
 
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
@@ -41,6 +46,8 @@ local_handlers = []
 
 export_folder = DEFAULT_EXPORT_FOLDER
 folder_dialog: adsk.core.FolderDialog = None
+
+master_sketch_offset_x, master_sketch_offset_y = 0, 0
 
 
 def start():
@@ -142,10 +149,16 @@ def command_execute(args: adsk.core.CommandEventArgs):
     if not os.path.exists(export_folder):
         os.makedirs(export_folder)
 
+    # Create a master sketch to copy the face sketches to
+    master_sketch = design.rootComponent.sketches.add(
+        design.rootComponent.xYConstructionPlane
+    )
+    master_sketch.isComputeDeferred = True
+
     # Export the faces to DXF files
     files: dict = {}
     for face in selected_faces:
-        result, file_path = export_face_to_dxf(face)
+        result, file_path = export_face_to_dxf(face, master_sketch)
 
         if result == True:
             files.update({file_path: result})
@@ -156,14 +169,29 @@ def command_execute(args: adsk.core.CommandEventArgs):
             )
             return
 
+    # Export the master sketch to a DXF file
+    master_sketch_filepath = os.path.join(export_folder, MASTER_SKETCH_FILENAME)
+    master_sketch.saveAsDXF(master_sketch_filepath)
+
+    # Delete the master sketch
+    master_sketch.deleteMe()
+
     # Show a message box with the exported files
-    message = f"Exported {len(files)} faces to DXF files:"
+    message = f"<p>Exported {len(files)} faces to DXF files + 1 master:</b><ul>"
     for file in files.keys():
-        message += f"\n  - {file}"
-    futil.msg_box(
+        message += f"<li><code>{file}</code></li>"
+    message += f"<li><code>{master_sketch_filepath}</code></li></ul>"
+    message += f"<p><i>Selection set added: {SELECTION_SET_NAME}</i></p>"
+    message += f"<p><b>Do you want to open the export folder?</b></p>"
+
+    result = futil.msg_box(
         message,
+        buttons=adsk.core.MessageBoxButtonTypes.OKCancelButtonType,
         icon=adsk.core.MessageBoxIconTypes.InformationIconType,
     )
+
+    if result == adsk.core.DialogResults.DialogOK:
+        open_finder_at_folder(export_folder)
 
 
 def command_input_changed(args: adsk.core.InputChangedEventArgs):
@@ -204,9 +232,10 @@ def command_destroy(args: adsk.core.CommandEventArgs):
     futil.log(f"{CMD_NAME} Command Destroy Event")
 
     # Reset the global variables
-    global local_handlers, folder_dialog
+    global local_handlers, folder_dialog, master_sketch_offset_x, master_sketch_offset_y
     local_handlers = []
     folder_dialog = None
+    master_sketch_offset_x, master_sketch_offset_y = 0, 0
 
 
 def create_inputs(inputs: adsk.core.CommandInputs):
@@ -258,10 +287,14 @@ def connect_to_events(command: adsk.core.Command):
     futil.add_handler(command.destroy, command_destroy, local_handlers=local_handlers)
 
 
-def export_face_to_dxf(face: adsk.fusion.BRepFace) -> tuple[bool, str]:
+def export_face_to_dxf(
+    face: adsk.fusion.BRepFace, master: adsk.fusion.Sketch
+) -> tuple[bool, str]:
     """
     Export the face to a DXF file.
     """
+
+    global master_sketch_offset_x, master_sketch_offset_y
 
     try:
         # Get the root component
@@ -269,7 +302,7 @@ def export_face_to_dxf(face: adsk.fusion.BRepFace) -> tuple[bool, str]:
         root_component = design.rootComponent
 
         # Get the name of the face
-        face_name = str(face.tempId)
+        face_name = f"{face.body.name}-{face.tempId}"
         ancestors = root_component.allOccurrencesByComponent(face.body.parentComponent)
         for ancestor in ancestors:
             face_name = f"{ancestor.name}-{face_name}"
@@ -284,12 +317,53 @@ def export_face_to_dxf(face: adsk.fusion.BRepFace) -> tuple[bool, str]:
         # Project the face into the sketch
         sketch.project(face)
 
-        # Save the sketch as a DXF file
-        result = sketch.saveAsDXF(file_path)
+        # # Save the sketch as a DXF file
+        sketch.saveAsDXF(file_path)
+
+        # Redefine sketch plane to be root XY plane
+        sketch.redefine(design.rootComponent.xYConstructionPlane)
+
+        # Calculate sketch translation
+        master_min = master.boundingBox.minPoint
+        master_min.translateBy(
+            adsk.core.Vector3D.create(master_sketch_offset_x, master_sketch_offset_y, 0)
+        )
+        sketch_min = sketch.boundingBox.minPoint
+        trans_matrix = adsk.core.Matrix3D.create()
+        trans_matrix.translation = sketch_min.vectorTo(master_min)
+
+        # Copy the sketch curves to the master sketch
+        obj_collection = adsk.core.ObjectCollection.create()
+        for item in sketch.sketchCurves:
+            obj_collection.add(item)
+        sketch.copy(obj_collection, trans_matrix, master)
+
+        # Update the master sketch offsets
+        master_sketch_offset_x = master.boundingBox.maxPoint.x + MASTER_SKETCH_SPACING
+        if master.boundingBox.maxPoint.x > MASTER_SKETCH_MAX_X:
+            master_sketch_offset_x = 0
+            master_sketch_offset_y = (
+                master.boundingBox.maxPoint.y + MASTER_SKETCH_SPACING
+            )
 
         # Delete the sketch
         sketch.deleteMe()
 
-        return [result, file_path]
-    except:
-        return [False, ""]
+        return [True, file_path]
+    except Exception as e:
+        futil.log(f"Failed to export face to DXF: {e}")
+        return [False, file_path]
+
+
+def open_finder_at_folder(folder_path):
+    # Ensure the path is absolute
+    absolute_path = os.path.abspath(folder_path)
+    os_name = platform.system()
+
+    try:
+        if os_name == "Windows":
+            subprocess.run(["explorer", absolute_path], check=True)
+        elif os_name == "Darwin":  # macos
+            subprocess.run(["open", absolute_path], check=True)
+    except subprocess.CalledProcessError as e:
+        futil.log(f"Failed to open Finder: {e}")
