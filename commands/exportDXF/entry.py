@@ -33,7 +33,7 @@ FOLDER_BUTTON_ID = f"{CMD_ID}_folder_button"
 
 # Constants
 SELECTION_SET_NAME = CMD_NAME
-DEFAULT_EXPORT_FOLDER = os.path.join("~", "Downloads", "DXF")
+DEFAULT_EXPORT_FOLDER = os.path.join(os.path.expanduser("~"), "Desktop", "DXF")
 
 # Local list of event handlers used to maintain a reference so
 # they are not released and garbage collected.
