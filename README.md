@@ -1,6 +1,6 @@
 # EasyBox — Autodesk Fusion Add-In
 
-<p align="center"><a href="https://www.autodesk.fr/products/fusion-360"><img src="/docs/assets/autodesk-fusion-logo.svg" height="160" width="auto" alt="Autodesk Fusion 360" /></a></p>
+<p align="center"><a href="https://www.autodesk.fr/products/fusion-360"><img src="./docs/assets/autodesk-fusion-logo.svg" height="160" width="auto" alt="Autodesk Fusion 360" /></a></p>
 
 EasyBox is an [Autodesk Fusion](https://www.autodesk.com/fr/products/fusion-360/overview) add-in that helps with creating boxes or other panel based projects.
 
@@ -8,7 +8,7 @@ EasyBox is an [Autodesk Fusion](https://www.autodesk.com/fr/products/fusion-360/
 
 ###  Dress Up
 
-> Design → Solid → Create → ![Dress Up Icon](/commands/dressUp/resources/16x16.png) Dress Up
+> Design → Solid → Create → ![Dress Up Icon](./commands/dressUp/resources/16x16.png) Dress Up
 
 Create panels from a solid
 
@@ -19,7 +19,7 @@ Create panels from a solid
 
 ### Box Joint
 
-> Design → Solid → Modify → ![Box Joint Icon](/commands/boxJoint/resources/16x16.png) Box Joint
+> Design → Solid → Modify → ![Box Joint Icon](./commands/boxJoint/resources/16x16.png) Box Joint
 
 Create box joints between two or more bodies
 
@@ -30,6 +30,15 @@ Create box joints between two or more bodies
 - Add an *as built joint* between the bodies (optional)
 - Remembers settings for the next operation
 - Support user parameters
+
+###  Export DXF
+
+> Design → Utilities → Utility → ![Export DXF Icon](./commands/exportDXF/resources/16x16.png) Export DXF
+
+Export multiple faces to a DXF file
+
+- Select the faces to export (automaticaly create or update the selection set named `Export DXF`)
+- Select the folder to create the DXF file in
 
 ## Installation
 
@@ -42,6 +51,7 @@ Create box joints between two or more bodies
 7. Click `Run`, this adds:
    - `Dress Up` to the `Solid → Create` menu
    - `Box Joint` to the `Solid → Modify` menu
+   - `Export DXF` to the `Utilities → Utility` menu
 
 ## Usage
 
@@ -49,7 +59,7 @@ Create box joints between two or more bodies
 
 Start by creating a solid box that is the size you want the final box to be. You can also create the box from a sketch by extruding it.
 
-![Step 1 demo](/docs/assets/step1.gif)
+![Step 1 demo](./docs/assets/step1.gif)
 
 ### Step 2
 
@@ -62,7 +72,7 @@ Then, create panels from the solid box:
 5. You can set the name and the thickness of each panels by expanding the `Advanced Configuration` section.
 6. When you are satisfied with the result, click the `OK` button.
 
-![Step 2 demo](/docs/assets/step2.gif)
+![Step 2 demo](./docs/assets/step2.gif)
 
 ### Step 3
 
@@ -77,13 +87,13 @@ Add box joints:
 7. Check the `Add Joint` checkbox if you want to add an *as built joint* between each pair of bodies.
 8. Repeat the process for the other panels.
 
-![Step 3 demo](/docs/assets/step3.gif)
+![Step 3 demo](./docs/assets/step3.gif)
 
 ### You're done!
 
 You can modify the original solid box as you want, the panels and the joints will update automatically.
 
-![Final demo](/docs/assets/final.gif)
+![Final demo](./docs/assets/final.gif)
 
 ## Development
 
@@ -95,7 +105,7 @@ You need to have [Visual Studio Code](https://code.visualstudio.com) installed o
    - Windows: `%appdata%\Autodesk\Autodesk Fusion 360\API\AddIns`
 3. Open Fusion.
 4. Click on the `Scripts and Add-Ins...` button on the toolbar under the `Utilities → Add-Ins` menu.
-5. Under the `Add-Ins` tab, click on the `BoxJoints` add-in.
+5. Under the `Add-Ins` tab, click on the `EasyBox` add-in.
 6. Click on the `Debug` button, this will open the add-in in [Visual Studio Code](https://code.visualstudio.com).
 7. Start the debugger by clicking on the `Run and Debug → Python Debugger: debug using launch.json` button on the toolbar.
 8. Then select `Python: Attach launch.json` from the dropdown.
