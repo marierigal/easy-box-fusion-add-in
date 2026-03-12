@@ -363,7 +363,7 @@ def create_inputs(inputs: adsk.core.CommandInputs):
 
     # Create a bool input to allow component creation
     create_component_input = inputs.addBoolValueInput(
-        CREATE_COMPONENT_INPUT_ID, "Create Component", True, "", True
+        CREATE_COMPONENT_INPUT_ID, "Create Component", True, "", False
     )
     create_component_input.tooltip = "Create a component"
     create_component_input.tooltipDescription = (
