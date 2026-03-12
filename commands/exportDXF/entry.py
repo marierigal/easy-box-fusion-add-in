@@ -37,7 +37,6 @@ FOLDER_BUTTON_ID = f"{CMD_ID}_folder_button"
 SELECTION_SET_NAME = CMD_NAME
 DEFAULT_EXPORT_FOLDER = os.path.join(os.path.expanduser("~"), "Desktop", "DXF")
 MASTER_SKETCH_FILENAME = "master.dxf"
-MASTER_SKETCH_MAX_X = 50
 MASTER_SKETCH_SPACING = 0.1
 
 # Local list of event handlers used to maintain a reference so
@@ -294,7 +293,7 @@ def export_face_to_dxf(
     Export the face to a DXF file.
     """
 
-    global master_sketch_offset_x, master_sketch_offset_y
+    global master_sketch_offset_y
 
     try:
         # Get the root component
@@ -339,12 +338,7 @@ def export_face_to_dxf(
         sketch.copy(obj_collection, trans_matrix, master)
 
         # Update the master sketch offsets
-        master_sketch_offset_x = master.boundingBox.maxPoint.x + MASTER_SKETCH_SPACING
-        if master.boundingBox.maxPoint.x > MASTER_SKETCH_MAX_X:
-            master_sketch_offset_x = 0
-            master_sketch_offset_y = (
-                master.boundingBox.maxPoint.y + MASTER_SKETCH_SPACING
-            )
+        master_sketch_offset_y = master.boundingBox.maxPoint.y + MASTER_SKETCH_SPACING
 
         # Delete the sketch
         sketch.deleteMe()
