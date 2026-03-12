@@ -12,7 +12,7 @@ ui = app.userInterface
 
 CMD_ID = f"{config.COMPANY_NAME}_{config.ADDIN_NAME}_exportDXF"
 CMD_NAME = "Export DXF"
-CMD_Description = "Quickly export multiple faces profiles to DXF files."
+CMD_Description = "Quickly export multiple faces profiles to a DXF file."
 
 # Specify that the command will be promoted to the panel.
 IS_PROMOTED = True
@@ -169,16 +169,15 @@ def command_execute(args: adsk.core.CommandEventArgs):
             return
 
     # Export the master sketch to a DXF file
-    master_sketch_filepath = os.path.join(export_folder, MASTER_SKETCH_FILENAME)
+    master_sketch_filename = design.rootComponent.name + ".dxf"
+    master_sketch_filepath = os.path.join(export_folder, master_sketch_filename)
     master_sketch.saveAsDXF(master_sketch_filepath)
 
     # Delete the master sketch
     master_sketch.deleteMe()
 
     # Show a message box with the exported files
-    message = f"<p>Exported {len(files)} faces to DXF files + 1 master:</b><ul>"
-    for file in files.keys():
-        message += f"<li><code>{file}</code></li>"
+    message = f"<p>Exported {len(files)} faces to DXF file:</b><ul>"
     message += f"<li><code>{master_sketch_filepath}</code></li></ul>"
     message += f"<p><i>Selection set added: {SELECTION_SET_NAME}</i></p>"
     message += f"<p><b>Do you want to open the export folder?</b></p>"
@@ -316,9 +315,6 @@ def export_face_to_dxf(
         # Project the face into the sketch
         sketch.project(face)
 
-        # # Save the sketch as a DXF file
-        sketch.saveAsDXF(file_path)
-
         # Redefine sketch plane to be root XY plane
         sketch.redefine(design.rootComponent.xYConstructionPlane)
 
@@ -343,10 +339,10 @@ def export_face_to_dxf(
         # Delete the sketch
         sketch.deleteMe()
 
-        return [True, file_path]
+        return [True, face_name]
     except Exception as e:
         futil.log(f"Failed to export face to DXF: {e}")
-        return [False, file_path]
+        return [False, face_name]
 
 
 def open_finder_at_folder(folder_path):
