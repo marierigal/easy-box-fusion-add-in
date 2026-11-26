@@ -1,26 +1,26 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+version=${1:?Expected next version}
+output=${2:?Expected ZIP filename}
+output="$(pwd)/$output"
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
 
-NEXT_VERSION=$1
-ZIP_FILENAME=$2
+python3 - "$version" <<'PYTHON'
+import json
+from pathlib import Path
+import re
+import sys
 
-if [ -z ${NEXT_VERSION} || -z ${ZIP_FILENAME} ]; then
-    echo "Usage: $0 <next version> <zip filename>"
-    exit 1
-fi
+path = Path("EasyBox.manifest")
+text = path.read_text()
+updated, count = re.subn(r'("version"\s*:\s*)"[^"]*"', lambda m: m[1] + json.dumps(sys.argv[1]), text)
+if count != 1 or json.loads(updated)["version"] != sys.argv[1]:
+    raise ValueError("Expected one manifest version")
+path.write_text(updated)
+PYTHON
 
-# Update version in manifest file
-sed -i '' -e "s/\"version\":\t\".*\"/\"version\":\t\"${NEXT_VERSION}\"/" *.manifest
-
-echo "[semantic-release] [prepare-release] ✔ Manifest version updated to ${NEXT_VERSION}"
-
-# Create zip file
-zip -rq ${ZIP_FILENAME} \
-    commands \
-    docs \
-    lib \
-    *.manifest \
-    *.py \
-    LICENSE \
-    README.md
-
-echo "[semantic-release] [prepare-release] ✔ ${ZIP_FILENAME} created"
+mkdir "$stage/EasyBox"
+cp -R commands docs lib EasyBox.manifest ./*.py LICENSE README.md "$stage/EasyBox/"
+(cd "$stage" && zip -rq "$stage/release.zip" EasyBox)
+mv "$stage/release.zip" "$output"
