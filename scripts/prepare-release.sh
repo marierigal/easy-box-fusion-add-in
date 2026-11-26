@@ -9,12 +9,15 @@ trap 'rm -rf "$stage"' EXIT
 python3 - "$version" <<'PYTHON'
 import json
 from pathlib import Path
+import re
 import sys
 
 path = Path("EasyBox.manifest")
-manifest = json.loads(path.read_text())
-manifest["version"] = sys.argv[1]
-path.write_text(json.dumps(manifest, ensure_ascii=False, indent="\t") + "\n")
+text = path.read_text()
+updated, count = re.subn(r'("version"\s*:\s*)"[^"]*"', lambda m: m[1] + json.dumps(sys.argv[1]), text)
+if count != 1 or json.loads(updated)["version"] != sys.argv[1]:
+    raise ValueError("Expected one manifest version")
+path.write_text(updated)
 PYTHON
 
 mkdir "$stage/EasyBox"
